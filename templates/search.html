@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Global Search</span>
+      <h2>Search Results</h2>
+    </div>
+  </div>
+  <form class="search-large" action="{{ url_for('search_page') }}" method="get">
+    <input name="q" value="{{ q }}" placeholder="Search TP, GRN, Challan, Vehicle, Driver, Party, Route...">
+    <button class="btn primary" type="submit">Search</button>
+  </form>
+  <div class="results-list">
+    {% if q and results %}
+      {% for item in results %}
+        <article class="result-card">
+          <span class="badge">{{ item.type }}</span>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.subtitle }}</p>
+          {% if item.type == 'PDF' %}
+            <a href="{{ item.details }}" target="_blank">Open PDF</a>
+          {% else %}
+            <small>{{ item.details }}</small>
+          {% endif %}
+        </article>
+      {% endfor %}
+    {% elif q %}
+      <div class="empty-state">No matching record found.</div>
+    {% else %}
+      <div class="empty-state">Search from CRM database. Matching records will appear here on a new page.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

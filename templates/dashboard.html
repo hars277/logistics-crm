@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Secure workspace</span>
+      <h2>Operations Dashboard</h2>
+    </div>
+    <a class="btn primary" href="{{ url_for('operations', step='advance-voucher') }}">Start New Trip</a>
+  </div>
+  <div class="metric-grid">
+    <div class="metric"><span>Total Vehicles</span><strong>{{ counts.vehicles }}</strong></div>
+    <div class="metric"><span>Total Trips</span><strong>{{ counts.trips }}</strong></div>
+    <div class="metric"><span>Open Trips</span><strong>{{ counts.open_trips }}</strong></div>
+    <div class="metric"><span>Saved PDFs</span><strong>{{ counts.pdfs }}</strong></div>
+  </div>
+  <section class="form-section">
+    <div class="section-title"><h3>Recent Trips</h3></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>TP No</th><th>Vehicle</th><th>Division</th><th>Step</th><th>Status</th><th>Updated</th></tr></thead>
+        <tbody>
+          {% for r in recent %}
+          <tr><td>{{ r.tp_no }}</td><td>{{ r.vehicle_no or 'N/A' }}</td><td>{{ r.division_name or 'N/A' }}</td><td>{{ step_titles.get(r.current_step, r.current_step) }}</td><td><span class="badge">{{ r.status }}</span></td><td>{{ r.updated_at[:19].replace('T',' ') }}</td></tr>
+          {% else %}
+          <tr><td colspan="6">No trip yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

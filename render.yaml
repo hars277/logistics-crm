@@ -1,0 +1,29 @@
+# Render.com Blueprint — one-click deploy of the CRM + managed PostgreSQL.
+# In Render: New + > Blueprint > connect this repo. Render reads this file,
+# creates the web service and the database, and wires DATABASE_URL automatically.
+services:
+  - type: web
+    name: logistics-crm
+    runtime: python
+    plan: free                       # upgrade to "starter" for production
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /login
+    envVars:
+      - key: CRM_SECRET_KEY
+        generateValue: true          # Render generates a strong secret
+      - key: COOKIE_SECURE
+        value: "1"                   # secure cookies (HTTPS only)
+      - key: ADMIN_PASSWORD
+        sync: false                  # set your own strong admin password in the dashboard
+      - key: ARUN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: logistics-crm-db
+          property: connectionString
+
+databases:
+  - name: logistics-crm-db
+    plan: free                       # upgrade for production (free DB is temporary)
+    databaseName: logistics_crm

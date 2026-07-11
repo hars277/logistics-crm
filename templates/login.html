@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login | Logistics CRM</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-body">
+  <div class="login-bg"></div>
+  <main class="login-card glass">
+    <div class="brand-lockup">
+      <div class="brand-mark">AT</div>
+      <div>
+        <h1>Ajay Transport</h1>
+        <p>Operations CRM</p>
+      </div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="toast-message {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" class="login-form" autocomplete="off">
+      <label>User Id</label>
+      <input name="username" placeholder="Enter User Id" required autofocus>
+      <label>Password</label>
+      <input name="password" placeholder="Enter password" type="password" required>
+      <label>Division</label>
+      <select name="division_id" required>
+        {% for division in divisions %}
+          <option value="{{ division.id }}">{{ division.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary wide" type="submit">Login Securely</button>
+    </form>
+    <p class="hint center">Demo users: <b>admin/admin123</b> or <b>arun/admin123</b></p>
+    <p class="tiny center">Forgot password? Please contact administrator.</p>
+  </main>
+</body>
+</html>

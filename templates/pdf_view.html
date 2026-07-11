@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card pdf-page">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Saved PDF</span>
+      <h2>{{ doc.title }} - {{ doc.tp_no }}</h2>
+    </div>
+    <div class="pdf-actions">
+      <a class="btn secondary" href="{{ url_for('pdf_download', pdf_id=doc.id) }}">Download</a>
+      <button class="btn neutral" onclick="document.getElementById('pdfFrame').contentWindow.print()">Print</button>
+      <button class="btn primary" id="savePdfBtn" data-pdf-id="{{ doc.id }}">Save</button>
+      <button class="btn danger" onclick="window.close(); history.back();">Cancel</button>
+    </div>
+  </div>
+  <iframe id="pdfFrame" class="pdf-frame" src="{{ url_for('pdf_file', pdf_id=doc.id) }}"></iframe>
+</section>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Operations / Step {{ step_index + 1 }} of {{ step_order|length }}</span>
+      <h2>{{ title }}</h2>
+    </div>
+    <div class="step-pills">
+      {% for s in step_order %}
+        <a class="pill {{ 'done' if loop.index0 < step_index else '' }} {{ 'current' if s==step else '' }}" href="{{ url_for('operations', step=s) }}">{{ loop.index }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <form id="operationForm" class="operation-form" data-step="{{ step }}" autocomplete="off">
+    {% for section in sections %}
+      <section class="form-section">
+        <div class="section-title">
+          <h3>{{ section.title }}</h3>
+          {% if section.table %}<button class="btn mini" type="button" data-add-line>Add Line</button>{% endif %}
+        </div>
+        {% if section.table %}
+          <div class="line-table-wrap">
+            <table class="line-table" id="fuelLineTable">
+              <thead><tr>{% for col in section.columns %}<th>{{ col }}</th>{% endfor %}<th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="form-grid">
+            {% for field in section.fields %}
+              <div class="field field-{{ field.type }} {{ 'wide-field' if field.type=='textarea' else '' }}" data-field-wrap="{{ field.name }}">
+                <label for="{{ field.name }}">{{ field.label }}</label>
+                {% if field.type == 'select' %}
+                  <select id="{{ field.name }}" name="{{ field.name }}" {{ 'disabled' if field.readonly else '' }}>
+                    <option value="">--Select--</option>
+                    {% if field.name == 'vendor_name' %}
+                      {% for d in divisions %}<option value="{{ d.name }}" {{ 'selected' if data.get(field.name)==d.name else '' }}>{{ d.name }}</option>{% endfor %}
+                    {% else %}
+                      {% for opt in field.options %}
+                        {% if opt %}<option value="{{ opt }}" {{ 'selected' if data.get(field.name)==opt else '' }}>{{ opt }}</option>{% endif %}
+                      {% endfor %}
+                    {% endif %}
+                  </select>
+                {% elif field.type == 'radio' %}
+                  <div class="radio-row">
+                    {% for opt in field.options %}
+                      <label><input type="radio" name="{{ field.name }}" value="{{ opt }}" {{ 'checked' if data.get(field.name)==opt else '' }}> {{ opt }}</label>
+                    {% endfor %}
+                  </div>
+                {% elif field.type == 'payment' %}
+                  <div class="radio-row payment-row">
+                    {% for opt in field.options %}
+                      <label><input type="radio" name="{{ field.name }}" value="{{ opt }}" {{ 'checked' if data.get(field.name)==opt else '' }}> {{ opt }}</label>
+                    {% endfor %}
+                  </div>
+                  <small class="hint" id="paymentHint">Cash account selected.</small>
+                {% elif field.type == 'textarea' %}
+                  <textarea id="{{ field.name }}" name="{{ field.name }}" rows="3" {{ 'readonly' if field.readonly else '' }}>{{ data.get(field.name, '') }}</textarea>
+                {% elif field.type == 'checkbox' %}
+                  <label class="check-line"><input id="{{ field.name }}" name="{{ field.name }}" type="checkbox" value="1" {{ 'checked' if data.get(field.name) else '' }}> Yes</label>
+                {% elif field.type == 'vehicle' %}
+                  <div class="vehicle-field">
+                    <input id="{{ field.name }}" name="{{ field.name }}" value="{{ data.get(field.name, '') }}" inputmode="latin" placeholder="Enter vehicle no." data-vehicle-input>
+                    <button class="btn mini secondary" type="button" data-open-vehicle-modal>Add Vehicle</button>
+                  </div>
+                  <small class="hint vehicle-hint" id="vehicleHint"></small>
+                {% else %}
+                  <input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.type }}" value="{{ data.get(field.name, '') }}" {{ 'readonly' if field.readonly else '' }}>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </section>
+    {% endfor %}
+
+    <div class="sticky-actions">
+      <button class="btn secondary" type="button" id="backBtn">Back</button>
+      <button class="btn neutral" type="button" id="printBtn">Print</button>
+      <button class="btn primary" type="submit" id="saveNextBtn">Save & Next</button>
+    </div>
+  </form>
+</section>
+
+<div class="modal hidden" id="vehicleModal" role="dialog" aria-modal="true">
+  <div class="modal-card large-modal">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">Master Data</span>
+        <h3>Add / Update Vehicle</h3>
+      </div>
+      <button class="ghost close-modal" type="button">×</button>
+    </div>
+    <form id="vehicleForm" class="form-grid compact-grid">
+      <div class="field"><label>Vehicle No. <em class="req">*</em></label><input name="vehicle_no" required></div>
+      <div class="field"><label>FTL Type <em class="req">*</em></label>
+        <select name="ftl_type" required>
+          <option value="">--Select--</option>
+          {% for opt in ftl_types %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Driver Name <span class="opt">(optional)</span></label><input name="driver_name"></div>
+      <div class="field"><label>Driver No. <span class="opt">(optional, 10 digits)</span></label><input name="driver_mobile" inputmode="numeric" maxlength="10" pattern="\d{10}" placeholder="10-digit mobile"></div>
+      <div class="field"><label>Fuel Type <em class="req">*</em></label>
+        <select name="fuel_type" required><option value="">--Select--</option><option>DIESEL</option><option>CNG</option><option>PETROL</option><option>EV</option></select>
+      </div>
+      <div class="field"><label>Tank Capacity (Ltr) <em class="req">*</em></label><input name="tank_capacity" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Mileage (KM/Ltr) <em class="req">*</em></label><input name="mileage" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Last Closing KM <em class="req">*</em></label><input name="last_closing_km" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Opening KM <em class="req">*</em></label><input name="opening_km" type="number" step="0.01" min="0" required></div>
+      <div class="field"><label>Vehicle Type <em class="req">*</em></label><select name="vehicle_type" required><option value="">--Select--</option><option>SELF</option><option>ATTACHED</option><option>MARKET</option></select></div>
+      <div class="field"><label>Division <em class="req">*</em></label><select name="current_division_id" required>{% for d in divisions %}<option value="{{ d.id }}" {{ 'selected' if current_division and d.id==current_division.id else '' }}>{{ d.name }}</option>{% endfor %}</select></div>
+      <div class="modal-actions full-row">
+        <button class="btn secondary close-modal" type="button">Cancel</button>
+        <button class="btn primary" type="submit">Save Vehicle</button>
+      </div>
+    </form>
+
+    <div class="bulk-box">
+      <h4>Bulk Vehicle Upload</h4>
+      <p class="hint">CSV/XLSX columns supported: vehicle_no, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, division_id, vehicle_type.</p>
+      <form id="bulkVehicleForm" class="bulk-form">
+        <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
+        <select name="division_id">{% for d in divisions %}<option value="{{ d.id }}" {{ 'selected' if current_division and d.id==current_division.id else '' }}>{{ d.name }}</option>{% endfor %}</select>
+        <button class="btn neutral" type="submit">Upload CSV / Excel</button>
+      </form>
+      <div class="bulk-result" id="bulkResult"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="pumpModal" role="dialog" aria-modal="true">
+  <div class="modal-card small-modal">
+    <div class="modal-head"><h3>Add Fuel Pump / Provider</h3><button class="ghost close-modal" type="button">×</button></div>
+    <form id="pumpForm">
+      <div class="field"><label>Pump / Provider Name</label><input name="name" required placeholder="e.g. HP SHRIPAL PUMP"></div>
+      <div class="modal-actions">
+        <button class="btn secondary close-modal" type="button">Cancel</button>
+        <button class="btn primary" type="submit">Save Pump</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal hidden" id="accountModal" role="dialog" aria-modal="true">
+  <div class="modal-card small-modal">
+    <div class="modal-head"><h3>Add Payment Account</h3><button class="ghost close-modal" type="button">×</button></div>
+    <form id="accountForm">
+      <div class="field"><label>Account Name</label><input name="name" required placeholder="e.g. HDFC BANK : 1234 : HDFC0001"></div>
+      <div class="field"><label>Account Type</label>
+        <select name="acc_type"><option value="CASH">CASH</option><option value="BANK">BANK</option><option value="FUEL">FUEL</option></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary close-modal" type="button">Cancel</button>
+        <button class="btn primary" type="submit">Save Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+window.CRM_STEP = {{ step|tojson }};
+window.CRM_NEXT = {{ (step_order[step_index + 1] if step_index + 1 < step_order|length else '')|tojson }};
+window.CRM_PREV = {{ (step_order[step_index - 1] if step_index > 0 else '')|tojson }};
+</script>
+{% endblock %}

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ title or 'Logistics CRM' }}</title>
+  <script>
+    // Apply saved theme before paint to avoid a flash. Default = dark.
+    (function () {
+      try {
+        var t = localStorage.getItem('crm_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="app-body">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark small">AT</div>
+      <div>
+        <strong>AJAY TRANSPORT</strong>
+        <span>Since 1991</span>
+      </div>
+    </div>
+    <nav class="side-nav">
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      <details open>
+        <summary>Operation</summary>
+        {% for s in step_order %}
+          <a href="{{ url_for('operations', step=s) }}" class="sub {{ 'active' if step is defined and step==s else '' }}">{{ loop.index }}. {{ step_titles[s] }}</a>
+        {% endfor %}
+      </details>
+      <details>
+        <summary>Tyre Management</summary><a class="disabled">Coming Later</a>
+      </details>
+      <details>
+        <summary>Service Management</summary><a class="disabled">Coming Later</a>
+      </details>
+      <details>
+        <summary>Inventory</summary><a class="disabled">Coming Later</a>
+      </details>
+      <details>
+        <summary>Invoice</summary><a class="disabled">Coming Later</a>
+      </details>
+      <details>
+        <summary>Accounts</summary><a class="disabled">Coming Later</a>
+      </details>
+      <details>
+        <summary>Settings</summary><a class="disabled">Coming Later</a>
+      </details>
+    </nav>
+  </aside>
+
+  <section class="shell">
+    <header class="topbar">
+      <button class="icon-btn" id="sidebarToggle" type="button" aria-label="Toggle menu">☰</button>
+      <form class="global-search" action="{{ url_for('search_page') }}" method="get">
+        <span>⌕</span>
+        <input name="q" value="{{ q if q is defined else '' }}" placeholder="Track Your GRN / Challan / TP / Vehicle / Driver...">
+      </form>
+      <div class="top-actions">
+        <button class="theme-toggle" id="reminderBell" type="button" aria-label="Pending trips" title="Pending trip reminders">🔔<span class="bell-count hidden" id="bellCount">0</span></button>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle light / dark">🌙</button>
+        <label>Division</label>
+        <select id="divisionSwitcher">
+          {% for division in divisions %}
+            <option value="{{ division.id }}" {{ 'selected' if current_division and division.id==current_division.id else '' }}>{{ division.name }}</option>
+          {% endfor %}
+        </select>
+        <label>User</label>
+        <strong>{{ user.full_name }}</strong>
+        <a class="logout" href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+    <footer class="footer">All Rights Reserved © 2026 | Logistics CRM | Software Version 1.0</footer>
+  </section>
+
+  <div class="modal hidden" id="confirmDivisionModal" role="dialog" aria-modal="true">
+    <div class="modal-card small-modal">
+      <div class="modal-head">
+        <h3>Vehicle Division Mismatch</h3>
+        <button class="ghost close-modal" type="button">×</button>
+      </div>
+      <p id="divisionMismatchText"></p>
+      <div class="modal-actions">
+        <button class="btn secondary close-modal" type="button">Keep Current</button>
+        <button class="btn primary" id="switchVehicleDivision" type="button">Switch Division</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="reminderModal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Pending Work</span>
+          <h3>Incomplete Trips</h3>
+        </div>
+        <button class="ghost close-modal" type="button">×</button>
+      </div>
+      <div class="reminder-body" id="reminderBody"><p class="hint" style="padding:18px 22px">Loading…</p></div>
+    </div>
+  </div>
+
+  {% if user %}<script>window.CRM_SHOW_REMINDERS = {{ 'true' if show_reminders else 'false' }};</script>{% endif %}
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
