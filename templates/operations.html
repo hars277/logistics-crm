@@ -120,7 +120,7 @@
 
     <div class="bulk-box">
       <h4>Bulk Vehicle Upload</h4>
-      <p class="hint">CSV/XLSX columns supported: vehicle_no, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, division_id, vehicle_type.</p>
+      <p class="hint">CSV/XLSX columns: vehicle_no, ftl_type, fuel_type, tank_capacity, mileage, driver_name, driver_mobile, last_closing_km, opening_km, division_id, vehicle_type. (vehicle_no zaroori hai; baaki khali chhod sakte ho.)</p>
       <form id="bulkVehicleForm" class="bulk-form">
         <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
         <select name="division_id">{% for d in divisions %}<option value="{{ d.id }}" {{ 'selected' if current_division and d.id==current_division.id else '' }}>{{ d.name }}</option>{% endfor %}</select>

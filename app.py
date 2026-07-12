@@ -801,6 +801,9 @@ def create_app() -> Flask:
                     "ftl_type": row.get("ftl_type") or row.get("ftl type") or "",
                     "driver_name": row.get("driver_name") or row.get("driver name") or "",
                     "driver_mobile": row.get("driver_mobile") or row.get("driver no") or row.get("driver mobile") or "",
+                    "fuel_type": row.get("fuel_type") or row.get("fuel type") or "",
+                    "tank_capacity": row.get("tank_capacity") or row.get("tank capacity") or 0,
+                    "mileage": row.get("mileage") or 0,
                     "last_closing_km": row.get("last_closing_km") or row.get("last closing km") or 0,
                     "opening_km": row.get("opening_km") or row.get("opening km") or 0,
                     "current_division_id": int(row.get("division_id") or division_id),
@@ -815,18 +818,18 @@ def create_app() -> Flask:
                     execute(
                         """
                         UPDATE vehicles SET ftl_type=?, driver_name=?, driver_mobile=?, last_closing_km=?, opening_km=?,
-                        current_division_id=?, vehicle_type=?, updated_at=? WHERE id=?
+                        tank_capacity=?, mileage=?, fuel_type=?, current_division_id=?, vehicle_type=?, updated_at=? WHERE id=?
                         """,
-                        (data["ftl_type"], data["driver_name"], data["driver_mobile"], data["last_closing_km"], data["opening_km"], data["current_division_id"], data["vehicle_type"], now, existing["id"]),
+                        (data["ftl_type"], data["driver_name"], data["driver_mobile"], data["last_closing_km"], data["opening_km"], data["tank_capacity"], data["mileage"], data["fuel_type"], data["current_division_id"], data["vehicle_type"], now, existing["id"]),
                     )
                     updated += 1
                 else:
                     execute(
                         """
-                        INSERT INTO vehicles(vehicle_no, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, current_division_id, vehicle_type, created_at, updated_at)
-                        VALUES(?,?,?,?,?,?,?,?,?,?)
+                        INSERT INTO vehicles(vehicle_no, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, tank_capacity, mileage, fuel_type, current_division_id, vehicle_type, created_at, updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
-                        (data["vehicle_no"], data["ftl_type"], data["driver_name"], data["driver_mobile"], data["last_closing_km"], data["opening_km"], data["current_division_id"], data["vehicle_type"], now, now),
+                        (data["vehicle_no"], data["ftl_type"], data["driver_name"], data["driver_mobile"], data["last_closing_km"], data["opening_km"], data["tank_capacity"], data["mileage"], data["fuel_type"], data["current_division_id"], data["vehicle_type"], now, now),
                     )
                     added += 1
             except Exception as exc:
