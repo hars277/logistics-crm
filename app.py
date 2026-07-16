@@ -463,7 +463,7 @@ def create_app() -> Flask:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     app.config.update(
         SECRET_KEY=os.environ.get("CRM_SECRET_KEY", "dev-change-this-secret-key"),
-        MAX_CONTENT_LENGTH=20 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=60 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") == "1",
@@ -599,7 +599,11 @@ def create_app() -> Flask:
     @login_required
     @csrf_required
     def api_peshgi_save():
-        p = sanitize_step_data(request.get_json(force=True) or {})
+        # Accept multipart (with photos) or JSON.
+        if request.files or request.form:
+            p = sanitize_step_data({k: v for k, v in request.form.items()})
+        else:
+            p = sanitize_step_data(request.get_json(force=True) or {})
         vehicle_no = normalize_vehicle_no(p.get("vehicle_no"))
         if not vehicle_no:
             return jsonify({"ok": False, "message": "Vehicle No. is required."}), 400
@@ -680,8 +684,45 @@ def create_app() -> Flask:
                 VALUES(?,?,?,?,?,?,?,?,?,?)""",
                 (tp_no, vehicle["id"], current_div_id, "In Progress", "advance-voucher", json.dumps(voucher), json.dumps(peshgi), session["user_id"], now, now),
             )
-        record_audit("PESHGI_SAVE", "trip_processes", trip_id, {"tp_no": tp_no, "vehicle": vehicle_no})
-        return jsonify({"ok": True, "tp_no": tp_no, "message": f"Peshgi saved & voucher created. TP No: {tp_no}"})
+        # Save uploaded photos (TCS/THC/LR + QR) into the database, linked to this trip.
+        saved_photos = []
+        uploads = [(f, "tcs") for f in request.files.getlist("tcs_photos")]
+        qr = request.files.get("qr_photo")
+        if qr and qr.filename:
+            uploads.append((qr, "qr"))
+        for fs, kind in uploads[:12]:  # cap total photos per submit
+            if not fs or not fs.filename:
+                continue
+            blob = fs.read()
+            if not blob or len(blob) > 12 * 1024 * 1024:  # skip empty / >12MB
+                continue
+            mime = fs.mimetype or "image/jpeg"
+            fname = secure_filename(fs.filename)[:200] or f"{kind}.jpg"
+            pid = execute_returning_id(
+                "INSERT INTO trip_photos(tp_no, trip_id, kind, filename, mime, photo_blob, created_by, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (tp_no, trip_id, kind, fname, mime, psycopg2.Binary(blob), session["user_id"], now),
+            )
+            saved_photos.append({"id": pid, "kind": kind, "filename": fname, "url": url_for("trip_photo", photo_id=pid)})
+
+        record_audit("PESHGI_SAVE", "trip_processes", trip_id, {"tp_no": tp_no, "vehicle": vehicle_no, "photos": len(saved_photos)})
+        return jsonify({
+            "ok": True, "tp_no": tp_no, "photos": saved_photos,
+            "message": f"Peshgi saved & voucher created. TP No: {tp_no}" + (f" ({len(saved_photos)} photo saved)" if saved_photos else ""),
+        })
+
+    @app.route("/photo/<int:photo_id>")
+    @login_required
+    def trip_photo(photo_id: int):
+        row = query_one("SELECT filename, mime, photo_blob FROM trip_photos WHERE id=?", (photo_id,))
+        if not row:
+            abort(404)
+        return send_file(io.BytesIO(bytes(row["photo_blob"])), mimetype=row["mime"] or "image/jpeg", download_name=row["filename"])
+
+    @app.route("/trip/<path:tp_no>/photos")
+    @login_required
+    def trip_photos_page(tp_no: str):
+        photos = query_all("SELECT id, kind, filename, created_at FROM trip_photos WHERE tp_no=? ORDER BY id", (tp_no,))
+        return render_template("trip_photos.html", tp_no=tp_no, photos=[dict(p) for p in photos])
 
     @app.route("/operations/<step>")
     @login_required
@@ -1564,6 +1605,18 @@ CREATE TABLE IF NOT EXISTS pdf_documents(
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pdfs_tp ON pdf_documents(tp_no);
+CREATE TABLE IF NOT EXISTS trip_photos(
+    id SERIAL PRIMARY KEY,
+    tp_no TEXT NOT NULL,
+    trip_id INTEGER REFERENCES trip_processes(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'tcs',
+    filename TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT 'image/jpeg',
+    photo_blob BYTEA NOT NULL,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trip_photos_tp ON trip_photos(tp_no);
 CREATE TABLE IF NOT EXISTS audit_logs(
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id),

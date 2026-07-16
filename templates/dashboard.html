@@ -18,12 +18,12 @@
     <div class="section-title"><h3>Recent Trips</h3></div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>TP No</th><th>Vehicle</th><th>Division</th><th>Step</th><th>Status</th><th>Updated</th></tr></thead>
+        <thead><tr><th>TP No</th><th>Vehicle</th><th>Division</th><th>Step</th><th>Status</th><th>Updated</th><th>Photos</th></tr></thead>
         <tbody>
           {% for r in recent %}
-          <tr><td>{{ r.tp_no }}</td><td>{{ r.vehicle_no or 'N/A' }}</td><td>{{ r.division_name or 'N/A' }}</td><td>{{ step_titles.get(r.current_step, r.current_step) }}</td><td><span class="badge">{{ r.status }}</span></td><td>{{ r.updated_at[:19].replace('T',' ') }}</td></tr>
+          <tr><td>{{ r.tp_no }}</td><td>{{ r.vehicle_no or 'N/A' }}</td><td>{{ r.division_name or 'N/A' }}</td><td>{{ step_titles.get(r.current_step, r.current_step) }}</td><td><span class="badge">{{ r.status }}</span></td><td>{{ r.updated_at[:19].replace('T',' ') }}</td><td><a href="{{ url_for('trip_photos_page', tp_no=r.tp_no) }}" style="color:var(--brand);font-weight:700">📷 View</a></td></tr>
           {% else %}
-          <tr><td colspan="6">No trip yet.</td></tr>
+          <tr><td colspan="7">No trip yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

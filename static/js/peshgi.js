@@ -131,19 +131,31 @@
   }
 
   async function saveToDb() {
-    const payload = {
-      tcs_no: clean(F.tcsNo.value), vehicle_no: clean(F.vehicleNo.value).toUpperCase(),
-      driver_name: clean(F.driverName.value), driver_mobile: clean(F.driverMobile.value),
-      from_place: clean(F.fromPlace.value), to_place: clean(F.toPlace.value),
-      entry_date: clean(F.entryDate.value), fuel_type: fuelType(),
-      labour: clean(F.labour.value), fuel_amount: clean(F.fuelAmount.value),
-      roti: clean(F.roti.value), babu: clean(F.babu.value), hold: clean(F.hold.value),
-      total_peshgi: clean(F.totalPeshgi.value), payment_receiving: clean(F.paymentReceiving.value),
-    };
+    // Multipart so the photos are stored in the database too.
+    const fd = new FormData();
+    const set = (k, v) => fd.append(k, v);
+    set('tcs_no', clean(F.tcsNo.value));
+    set('vehicle_no', clean(F.vehicleNo.value).toUpperCase());
+    set('driver_name', clean(F.driverName.value));
+    set('driver_mobile', clean(F.driverMobile.value));
+    set('from_place', clean(F.fromPlace.value));
+    set('to_place', clean(F.toPlace.value));
+    set('entry_date', clean(F.entryDate.value));
+    set('fuel_type', fuelType());
+    set('labour', clean(F.labour.value));
+    set('fuel_amount', clean(F.fuelAmount.value));
+    set('roti', clean(F.roti.value));
+    set('babu', clean(F.babu.value));
+    set('hold', clean(F.hold.value));
+    set('total_peshgi', clean(F.totalPeshgi.value));
+    set('payment_receiving', clean(F.paymentReceiving.value));
+    Array.from(F.tcsPhotos.files || []).forEach((f) => fd.append('tcs_photos', f));
+    if (F.qrPhoto.files && F.qrPhoto.files[0]) fd.append('qr_photo', F.qrPhoto.files[0]);
+
     const res = await fetch('/api/peshgi/save', {
       method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-      body: JSON.stringify(payload),
+      headers: { 'X-CSRF-Token': csrf },   // browser sets multipart Content-Type
+      body: fd,
     });
     const data = await res.json();
     if (!res.ok || data.ok === false) { const e = new Error(data.message || 'Save failed'); e.data = data; throw e; }
@@ -181,7 +193,13 @@
     try {
       const saved = await saveToDb();
       form.dataset.tpNo = saved.tp_no || '';
-      toast(`Saved ✓ Voucher banaya — TP: ${saved.tp_no}`, 'success');
+      const nPhotos = (saved.photos || []).length;
+      toast(`Saved ✓ Voucher banaya — TP: ${saved.tp_no}` + (nPhotos ? ` (${nPhotos} photo)` : ''), 'success');
+      const savedEl = $('peshgiSaved');
+      if (savedEl && saved.tp_no) {
+        savedEl.innerHTML = `✅ Saved in database — <b>${saved.tp_no}</b>` +
+          (nPhotos ? ` · <a href="/trip/${saved.tp_no}/photos" target="_blank" style="color:var(--brand);font-weight:700">${nPhotos} photo dekho</a>` : '');
+      }
       const message = buildMessage(getData());
       await shareOnWhatsApp(message);
     } catch (err) {

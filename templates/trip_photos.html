@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Saved Photos</span>
+      <h2>{{ tp_no }}</h2>
+    </div>
+    <a class="btn secondary" href="{{ url_for('dashboard') }}">← Dashboard</a>
+  </div>
+  <div style="padding:24px">
+    {% if photos %}
+      <div class="photo-grid">
+        {% for p in photos %}
+          <figure class="photo-card">
+            <a href="{{ url_for('trip_photo', photo_id=p.id) }}" target="_blank" rel="noopener">
+              <img src="{{ url_for('trip_photo', photo_id=p.id) }}" alt="{{ p.filename }}" loading="lazy">
+            </a>
+            <figcaption>
+              <span class="badge">{{ p.kind|upper }}</span>
+              <a class="btn mini secondary" href="{{ url_for('trip_photo', photo_id=p.id) }}" download>Download</a>
+            </figcaption>
+          </figure>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">Is TP ke liye koi photo saved nahi hai.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
