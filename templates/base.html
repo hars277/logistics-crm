@@ -28,6 +28,7 @@
     </div>
     <nav class="side-nav">
       <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      <a href="{{ url_for('peshgi') }}" class="{{ 'active' if request.endpoint=='peshgi' else '' }}">TCI Peshgi Expense</a>
       <details open>
         <summary>Operation</summary>
         {% for s in step_order %}

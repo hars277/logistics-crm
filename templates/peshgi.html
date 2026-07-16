@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-card">
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">TCI is managing by BEERU</span>
+      <h2>TCI Peshgi Expense</h2>
+    </div>
+  </div>
+
+  <form id="peshgiForm" class="operation-form" autocomplete="off">
+    <section class="form-section">
+      <div class="section-title"><h3>TCS / THC / LR Photos</h3></div>
+      <div class="form-grid">
+        <div class="field wide-field">
+          <label>TCS / THC / LR photos <span class="opt">(share on WhatsApp; side photos where TCS no. is visible)</span></label>
+          <input id="tcsPhotos" name="tcs_photos" type="file" accept="image/*,video/*" multiple>
+          <div class="file-list" id="tcsPreview"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title"><h3>Trip Details</h3></div>
+      <div class="form-grid">
+        <div class="field"><label>TCS / THC / LR No. <span class="opt">(optional)</span></label><input id="tcsNo" name="tcs_no" placeholder="Example: LR12345"></div>
+        <div class="field vehicle-field-wrap"><label>Vehicle No. <em class="req">*</em></label><input id="vehicleNo" name="vehicle_no" placeholder="HR55AB1234" required></div>
+        <div class="field"><label>Driver Name <em class="req">*</em></label><input id="driverName" name="driver_name" placeholder="Driver name" required></div>
+        <div class="field"><label>Driver Mob. No. <em class="req">*</em></label><input id="driverMobile" name="driver_mobile" inputmode="numeric" maxlength="10" placeholder="10 digit mobile no." required></div>
+        <div class="field"><label>From <em class="req">*</em></label><input id="fromPlace" name="from_place" placeholder="Loading place" required></div>
+        <div class="field"><label>To <em class="req">*</em></label><input id="toPlace" name="to_place" placeholder="Unloading place" required></div>
+        <div class="field"><label>Date <em class="req">*</em></label><input id="entryDate" name="entry_date" type="date" value="{{ today }}" required></div>
+        <div class="field"><label>Fuel Type <em class="req">*</em></label>
+          <div class="radio-row">
+            <label><input type="radio" name="fuel_type" value="CNG" checked> CNG</label>
+            <label><input type="radio" name="fuel_type" value="Diesel"> Diesel</label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title"><h3>Expense Details</h3></div>
+      <p class="hint" style="margin:-8px 0 16px">Total Peshgi auto-calculate hota hai. Hold optional. Diesel value Ltr me save hoti hai (paise me add nahi hoti).</p>
+      <div class="form-grid">
+        <div class="field"><label>Labour <em class="req">*</em></label><input id="labour" name="labour" type="number" min="0" step="1" placeholder="0" required></div>
+        <div class="field"><label id="fuelAmountLabel">CNG Price <em class="req">*</em></label><input id="fuelAmount" name="fuel_amount" type="number" min="0" step="1" placeholder="0" required></div>
+        <div class="field"><label>Roti <em class="req">*</em></label><input id="roti" name="roti" type="number" min="0" step="1" placeholder="0" required></div>
+        <div class="field"><label>Babu <em class="req">*</em></label><input id="babu" name="babu" type="number" min="0" step="1" placeholder="0" required></div>
+        <div class="field"><label>Hold <span class="opt">(optional)</span></label><input id="hold" name="hold" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Total Peshgi <em class="req">*</em></label><input id="totalPeshgi" name="total_peshgi" type="number" readonly value="0"></div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title"><h3>Payment</h3></div>
+      <div class="form-grid">
+        <div class="field wide-field"><label>Payment Receiving / Acc. No. / UPI <span class="opt">(optional)</span></label><input id="paymentReceiving" name="payment_receiving" placeholder="Account No. / UPI ID"></div>
+        <div class="field wide-field">
+          <label>Payment QR Code Image <span class="opt">(optional, share on WhatsApp)</span></label>
+          <input id="qrPhoto" name="qr_photo" type="file" accept="image/*">
+          <div class="file-list" id="qrPreview"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="sticky-actions">
+      <button class="btn secondary" type="button" id="peshgiClear">Clear</button>
+      <button class="btn neutral" type="button" id="peshgiCopy">Copy Message</button>
+      <button class="btn primary" type="submit" id="peshgiSend">Save &amp; Send on WhatsApp</button>
+    </div>
+  </form>
+
+  <section class="form-section" style="padding:0 24px 24px">
+    <div class="section-title"><h3>WhatsApp Preview</h3><span class="badge" id="liveTotal">₹0</span></div>
+    <pre id="messagePreview" class="preview-pre"></pre>
+    <p class="hint" style="margin-top:10px">Photo sharing ke liye mobile browser (HTTPS) pe kholein. Agar browser photo share block kare, to WhatsApp text khulega aur photos manually attach kar sakte ho.</p>
+  </section>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/peshgi.js') }}"></script>
+{% endblock %}

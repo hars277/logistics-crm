@@ -590,6 +590,99 @@ def create_app() -> Flask:
         )
         return render_template("dashboard.html", counts=counts, recent=recent)
 
+    @app.route("/peshgi")
+    @login_required
+    def peshgi():
+        return render_template("peshgi.html", today=datetime.now().strftime("%Y-%m-%d"))
+
+    @app.route("/api/peshgi/save", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_peshgi_save():
+        p = sanitize_step_data(request.get_json(force=True) or {})
+        vehicle_no = normalize_vehicle_no(p.get("vehicle_no"))
+        if not vehicle_no:
+            return jsonify({"ok": False, "message": "Vehicle No. is required."}), 400
+        mobile = re.sub(r"[^0-9]", "", normalize_text(p.get("driver_mobile")))
+        if mobile and len(mobile) != 10:
+            return jsonify({"ok": False, "message": "Driver mobile must be exactly 10 digits."}), 400
+
+        current_div_id = session["current_division_id"]
+        vehicle = find_vehicle(vehicle_no)
+        if vehicle and vehicle["current_division_id"] != current_div_id:
+            division = query_one("SELECT * FROM divisions WHERE id=?", (vehicle["current_division_id"],))
+            return jsonify({
+                "ok": False, "code": "division_mismatch",
+                "message": f"{vehicle_no} {division['name'] if division else 'doosri'} division ka hai. Upar se us division me switch karke continue karein.",
+                "division": dict(division) if division else None,
+            }), 409
+
+        now = datetime.utcnow().isoformat()
+        if not vehicle:
+            new_id = execute_returning_id(
+                """INSERT INTO vehicles(vehicle_no, current_division_id, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, vehicle_type, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (vehicle_no, current_div_id, "", normalize_text(p.get("driver_name")), mobile, 0, 0, "SELF", now, now),
+            )
+            vehicle = query_one("SELECT * FROM vehicles WHERE id=?", (new_id,))
+
+        div = get_current_division()
+        route = " - ".join([x for x in [normalize_text(p.get("from_place")), normalize_text(p.get("to_place"))] if x])
+        total = normalize_text(p.get("total_peshgi")) or "0"
+        # Peshgi raw data (stored + carried into operations autofill).
+        peshgi = {
+            "tcs_no": normalize_text(p.get("tcs_no")),
+            "vehicle_no": vehicle_no,
+            "driver_name": normalize_text(p.get("driver_name")),
+            "driver_mobile": mobile,
+            "from_place": normalize_text(p.get("from_place")),
+            "to_place": normalize_text(p.get("to_place")),
+            "fuel_type": normalize_text(p.get("fuel_type")),
+            "labour": normalize_text(p.get("labour")),
+            "fuel_amount": normalize_text(p.get("fuel_amount")),
+            "roti": normalize_text(p.get("roti")),
+            "babu": normalize_text(p.get("babu")),
+            "hold": normalize_text(p.get("hold")),
+            "total_peshgi": total,
+            "payment_receiving": normalize_text(p.get("payment_receiving")),
+        }
+        # Map into the advance-voucher so a trip/voucher is created for this vehicle.
+        voucher = {
+            "vehicle_no": vehicle_no,
+            "driver_name": normalize_text(p.get("driver_name")),
+            "driver_mobile": mobile,
+            "route": route,
+            "voucher_date": normalize_text(p.get("entry_date")),
+            "fuel_type": normalize_text(p.get("fuel_type")),
+            "vendor_name": div["name"] if div else "",
+            "payable_advance": total,
+            "paid_advance": total,
+            "total_advance": total,
+            "paid_to_account": normalize_text(p.get("payment_receiving")),
+            "remarks": f"Peshgi via TCI form. Labour {peshgi['labour'] or 0}, Roti {peshgi['roti'] or 0}, Babu {peshgi['babu'] or 0}, Hold {peshgi['hold'] or 0}.",
+        }
+
+        open_trip = open_trip_for_vehicle(vehicle["id"])
+        if open_trip:
+            tp_no = open_trip["tp_no"]
+            voucher["tp_no"] = tp_no
+            # keep existing voucher data if already present; always refresh peshgi.
+            execute(
+                "UPDATE trip_processes SET peshgi_json=?, voucher_json=COALESCE(NULLIF(voucher_json,''), ?), status='In Progress', updated_at=? WHERE id=?",
+                (json.dumps(peshgi), json.dumps(voucher), now, open_trip["id"]),
+            )
+            trip_id = open_trip["id"]
+        else:
+            tp_no = next_tp_no()
+            voucher["tp_no"] = tp_no
+            trip_id = execute_returning_id(
+                """INSERT INTO trip_processes(tp_no, vehicle_id, division_id, status, current_step, voucher_json, peshgi_json, created_by, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (tp_no, vehicle["id"], current_div_id, "In Progress", "advance-voucher", json.dumps(voucher), json.dumps(peshgi), session["user_id"], now, now),
+            )
+        record_audit("PESHGI_SAVE", "trip_processes", trip_id, {"tp_no": tp_no, "vehicle": vehicle_no})
+        return jsonify({"ok": True, "tp_no": tp_no, "message": f"Peshgi saved & voucher created. TP No: {tp_no}"})
+
     @app.route("/operations/<step>")
     @login_required
     def operations(step: str):
@@ -1169,7 +1262,8 @@ def merged_trip_data(trip: Row | None) -> Dict[str, Any]:
     merged: Dict[str, Any] = {}
     if not trip:
         return merged
-    for step, col in STEP_DB_COL.items():
+    # peshgi first (base), then the 7 step JSONs override it.
+    for col in ["peshgi_json"] + list(STEP_DB_COL.values()):
         raw = trip.get(col)
         if raw:
             try:
@@ -1450,6 +1544,7 @@ CREATE TABLE IF NOT EXISTS trip_processes(
     unloading_json TEXT,
     performance_json TEXT,
     expense_json TEXT,
+    peshgi_json TEXT,
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -1510,6 +1605,7 @@ def init_db() -> None:
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS tank_capacity DOUBLE PRECISION DEFAULT 0")
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mileage DOUBLE PRECISION DEFAULT 0")
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS fuel_type TEXT DEFAULT ''")
+            cur.execute("ALTER TABLE trip_processes ADD COLUMN IF NOT EXISTS peshgi_json TEXT")
             now = datetime.utcnow().isoformat()
             for name in DIVISION_NAMES:
                 cur.execute("INSERT INTO divisions(name, active) VALUES(%s,1) ON CONFLICT (name) DO NOTHING", (name,))
