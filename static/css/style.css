@@ -61,6 +61,19 @@ html[data-theme="light"]{
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font-family:Inter,"Segoe UI",Arial,sans-serif;background:var(--bg);background-image:var(--bg-grad);background-attachment:fixed;color:var(--ink);-webkit-font-smoothing:antialiased}
+/* Stop Chrome/Edge autofill from forcing a white background on inputs (dark-mode fix). */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill{
+  -webkit-text-fill-color:var(--ink)!important;
+  -webkit-box-shadow:0 0 0 1000px var(--field-bg) inset!important;
+  box-shadow:0 0 0 1000px var(--field-bg) inset!important;
+  caret-color:var(--ink);
+  transition:background-color 100000s ease-out 0s;
+}
 a{text-decoration:none;color:inherit}
 button,input,select,textarea{font:inherit;color:inherit}
 ::selection{background:rgba(43,182,196,.32)}
@@ -114,7 +127,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .app-body{display:flex;min-height:100%;overflow-x:hidden}
 .sidebar{width:256px;background:linear-gradient(180deg,#10202d,#0c1722);color:var(--ink-soft);position:fixed;inset:0 auto 0 0;z-index:20;display:flex;flex-direction:column;transition:transform .24s ease;border-right:1px solid var(--line-soft);box-shadow:10px 0 36px rgba(0,0,0,.30)}
 .sidebar.collapsed{transform:translateX(-256px)}
-.sidebar-brand{padding:22px 18px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line-soft)}
+.sidebar-brand{padding:22px 18px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line-soft);position:relative}
+.sidebar-close{margin-left:auto;width:32px;height:32px;flex-shrink:0;border:1px solid var(--line);background:var(--panel-soft);color:var(--ink);border-radius:9px;font-size:1.3rem;line-height:1;cursor:pointer;display:grid;place-items:center;transition:.14s}
+.sidebar-close:hover{border-color:var(--danger);color:var(--danger)}
 .sidebar-brand strong{display:block;font-size:.96rem;color:#fff}
 .sidebar-brand span{display:block;color:#7f9bb0;font-size:.74rem;margin-top:2px}
 .side-nav{padding:14px 12px 30px;overflow:auto}

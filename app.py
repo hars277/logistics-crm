@@ -549,6 +549,20 @@ def create_app() -> Flask:
         divisions = query_all("SELECT * FROM divisions WHERE active=1 ORDER BY name")
         return render_template("login.html", divisions=divisions)
 
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            # Log the request for the admin; never reveal whether the user exists (no enumeration).
+            try:
+                u = query_one("SELECT id FROM users WHERE username=?", (username,))
+                record_audit("PASSWORD_RESET_REQUEST", "users", u["id"] if u else None, {"username": username})
+            except Exception:
+                pass
+            flash("Reset request bhej diya gaya. Admin aapka password reset karke naya password bata denge.", "success")
+            return redirect(url_for("login"))
+        return render_template("forgot_password.html")
+
     @app.route("/logout")
     @login_required
     def logout():
@@ -1183,10 +1197,15 @@ def vehicle_autofill(vehicle: Row, trip: Row | None) -> Dict[str, Any]:
         "last_closing_km": vehicle.get("last_closing_km") if vehicle.get("last_closing_km") is not None else "",
         "opening_km": vehicle.get("opening_km") if vehicle.get("opening_km") is not None else "",
     }
+    # Carry EVERYTHING captured on the open trip so far (all steps) — the current
+    # form only applies the keys that match its own fields.
     merged = merged_trip_data(trip)
-    for key in CROSS_STEP_AUTOFILL_KEYS:
-        if merged.get(key) not in (None, ""):
-            data[key] = merged[key]
+    for key, val in merged.items():
+        if isinstance(val, list):
+            continue  # skip line-item tables
+        if val not in (None, ""):
+            data[key] = val
+    data["vehicle_no"] = vehicle["vehicle_no"]  # never let a stale value override
     return data
 
 

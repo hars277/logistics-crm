@@ -142,6 +142,14 @@
     else { sidebar.classList.toggle('collapsed'); shell.classList.toggle('full'); }
   });
 
+  const sidebarClose = $('#sidebarClose');
+  if (sidebarClose) sidebarClose.addEventListener('click', () => {
+    const sidebar = $('#sidebar');
+    const shell = $('.shell');
+    if (window.innerWidth <= 860) sidebar.classList.remove('show');
+    else { sidebar.classList.add('collapsed'); shell.classList.add('full'); }
+  });
+
   $$('.close-modal').forEach(btn => btn.addEventListener('click', () => btn.closest('.modal')?.classList.add('hidden')));
   $$('.modal').forEach(modal => modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); }));
 
