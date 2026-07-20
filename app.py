@@ -590,6 +590,74 @@ def create_app() -> Flask:
         )
         return render_template("dashboard.html", counts=counts, recent=recent)
 
+    @app.route("/api/dashboard/stats")
+    @login_required
+    def api_dashboard_stats():
+        """Aggregates for the dashboard charts (P&L = trip freight - trip expense)."""
+        trips = query_all(
+            """
+            SELECT tp.tp_no, tp.status, tp.created_at, tp.trip_creation_json, tp.expense_json, tp.peshgi_json,
+                   v.vehicle_no, d.name AS division_name
+            FROM trip_processes tp
+            LEFT JOIN vehicles v ON v.id = tp.vehicle_id
+            LEFT JOIN divisions d ON d.id = tp.division_id
+            ORDER BY tp.created_at DESC LIMIT 500
+            """
+        )
+        by_month: Dict[str, Dict[str, float]] = {}
+        by_vehicle: Dict[str, Dict[str, float]] = {}
+        driver_expense = 0.0
+        total_freight = total_expense = total_peshgi = 0.0
+        for t in trips:
+            def load(col):
+                try:
+                    return json.loads(t.get(col) or "{}")
+                except Exception:
+                    return {}
+            tc, ex, pe = load("trip_creation_json"), load("expense_json"), load("peshgi_json")
+            freight = to_float(tc.get("total_freight"))
+            expense = to_float(ex.get("total_tp_expense"))
+            peshgi_amt = to_float(pe.get("total_peshgi"))
+            driver_expense += to_float(ex.get("driver_expense"))
+            total_freight += freight
+            total_expense += expense
+            total_peshgi += peshgi_amt
+            month = (t.get("created_at") or "")[:7] or "unknown"
+            m = by_month.setdefault(month, {"freight": 0.0, "expense": 0.0, "profit": 0.0})
+            m["freight"] += freight
+            m["expense"] += expense
+            m["profit"] += freight - expense
+            vno = t.get("vehicle_no") or "N/A"
+            bv = by_vehicle.setdefault(vno, {"freight": 0.0, "expense": 0.0, "trips": 0})
+            bv["freight"] += freight
+            bv["expense"] += expense
+            bv["trips"] += 1
+
+        months = sorted(by_month.keys())[-12:]
+        top_vehicles = sorted(by_vehicle.items(), key=lambda kv: kv[1]["freight"], reverse=True)[:8]
+        status_rows = query_all("SELECT status, COUNT(*) AS c FROM trip_processes GROUP BY status")
+        div_rows = query_all(
+            """SELECT d.name, COUNT(v.id) AS c FROM divisions d
+               LEFT JOIN vehicles v ON v.current_division_id = d.id GROUP BY d.name ORDER BY d.name"""
+        )
+        acc_rows = query_all("SELECT acc_type, COUNT(*) AS c FROM payment_accounts WHERE active=1 GROUP BY acc_type")
+        return jsonify({
+            "ok": True,
+            "totals": {
+                "freight": round(total_freight, 2),
+                "expense": round(total_expense, 2),
+                "profit": round(total_freight - total_expense, 2),
+                "peshgi": round(total_peshgi, 2),
+                "driver_expense": round(driver_expense, 2),
+            },
+            "months": months,
+            "monthly": [{"month": m, **{k: round(v, 2) for k, v in by_month[m].items()}} for m in months],
+            "vehicles": [{"vehicle_no": k, "freight": round(v["freight"], 2), "expense": round(v["expense"], 2), "trips": v["trips"]} for k, v in top_vehicles],
+            "status": [{"status": r["status"], "count": r["c"]} for r in status_rows],
+            "divisions": [{"name": r["name"], "count": r["c"]} for r in div_rows],
+            "accounts": [{"acc_type": r["acc_type"], "count": r["c"]} for r in acc_rows],
+        })
+
     @app.route("/peshgi")
     @login_required
     def peshgi():
@@ -827,13 +895,15 @@ def create_app() -> Flask:
         q = normalize_vehicle_no(request.args.get("q", ""))
         if not q:
             return jsonify({"ok": True, "results": []})
+        # Match anywhere in the number (any digit/letter), not just the start.
         rows = query_all(
             """
             SELECT v.vehicle_no, v.driver_name, v.ftl_type, d.name AS division_name
             FROM vehicles v LEFT JOIN divisions d ON d.id = v.current_division_id
-            WHERE v.vehicle_no LIKE ? ORDER BY v.vehicle_no LIMIT 10
+            WHERE v.vehicle_no LIKE ?
+            ORDER BY CASE WHEN v.vehicle_no LIKE ? THEN 0 ELSE 1 END, v.vehicle_no LIMIT 12
             """,
-            (q + "%",),
+            ("%" + q + "%", q + "%"),
         )
         return jsonify({"ok": True, "results": [dict(r) for r in rows]})
 
@@ -859,10 +929,11 @@ def create_app() -> Flask:
     @login_required
     def api_payment_accounts():
         acc_type = normalize_text(request.args.get("type")).upper()
+        cols = "id, name, acc_type, account_no, holder_name, ifsc, branch"
         if acc_type in ("CASH", "BANK", "FUEL"):
-            rows = query_all("SELECT id, name, acc_type FROM payment_accounts WHERE active=1 AND acc_type=? ORDER BY name", (acc_type,))
+            rows = query_all(f"SELECT {cols} FROM payment_accounts WHERE active=1 AND acc_type=? ORDER BY name", (acc_type,))
         else:
-            rows = query_all("SELECT id, name, acc_type FROM payment_accounts WHERE active=1 ORDER BY name")
+            rows = query_all(f"SELECT {cols} FROM payment_accounts WHERE active=1 ORDER BY name")
         return jsonify({"ok": True, "results": [dict(r) for r in rows]})
 
     @app.route("/api/payment-accounts", methods=["POST"])
@@ -874,12 +945,50 @@ def create_app() -> Flask:
         acc_type = normalize_text(payload.get("acc_type")).upper()
         if acc_type not in ("CASH", "BANK", "FUEL"):
             acc_type = "CASH"
+        account_no = normalize_text(payload.get("account_no"))[:40]
+        holder_name = normalize_text(payload.get("holder_name"))[:120]
+        ifsc = normalize_text(payload.get("ifsc")).upper()[:20]
+        branch = normalize_text(payload.get("branch"))[:120]
         if not name:
             return jsonify({"ok": False, "message": "Account name is required."}), 400
-        execute("INSERT INTO payment_accounts(name, acc_type, active, created_at) VALUES(?,?,1,?) ON CONFLICT (name) DO NOTHING", (name, acc_type, datetime.utcnow().isoformat()))
+        if acc_type == "BANK" and not (account_no and ifsc):
+            return jsonify({"ok": False, "message": "Bank account ke liye Account No. aur IFSC zaroori hai."}), 400
+        execute(
+            """INSERT INTO payment_accounts(name, acc_type, account_no, holder_name, ifsc, branch, active, created_at)
+            VALUES(?,?,?,?,?,?,1,?) ON CONFLICT (name) DO UPDATE SET
+            acc_type=EXCLUDED.acc_type, account_no=EXCLUDED.account_no, holder_name=EXCLUDED.holder_name,
+            ifsc=EXCLUDED.ifsc, branch=EXCLUDED.branch""",
+            (name, acc_type, account_no, holder_name, ifsc, branch, datetime.utcnow().isoformat()),
+        )
         record_audit("ACCOUNT_ADD", "payment_accounts", None, {"name": name, "acc_type": acc_type})
-        rows = query_all("SELECT id, name, acc_type FROM payment_accounts WHERE active=1 AND acc_type=? ORDER BY name", (acc_type,))
+        rows = query_all("SELECT id, name, acc_type, account_no, holder_name, ifsc, branch FROM payment_accounts WHERE active=1 AND acc_type=? ORDER BY name", (acc_type,))
         return jsonify({"ok": True, "message": "Account added.", "name": name, "results": [dict(r) for r in rows]})
+
+    @app.route("/api/drivers")
+    @login_required
+    def api_drivers():
+        q = normalize_text(request.args.get("q"))
+        if q:
+            rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 AND (name ILIKE ? OR mobile LIKE ?) ORDER BY name LIMIT 20", ("%" + q + "%", "%" + q + "%"))
+        else:
+            rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 ORDER BY name")
+        return jsonify({"ok": True, "results": [dict(r) for r in rows]})
+
+    @app.route("/api/drivers", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_driver_add():
+        payload = request.get_json(force=True) or {}
+        name = normalize_text(payload.get("name"))[:150]
+        mobile = re.sub(r"[^0-9]", "", normalize_text(payload.get("mobile")))[:10]
+        if not name:
+            return jsonify({"ok": False, "message": "Driver name is required."}), 400
+        if mobile and len(mobile) != 10:
+            return jsonify({"ok": False, "message": "Driver mobile must be exactly 10 digits."}), 400
+        execute("INSERT INTO drivers(name, mobile, active, created_at) VALUES(?,?,1,?) ON CONFLICT (name, mobile) DO NOTHING", (name, mobile, datetime.utcnow().isoformat()))
+        record_audit("DRIVER_ADD", "drivers", None, {"name": name, "mobile": mobile})
+        rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 ORDER BY name")
+        return jsonify({"ok": True, "message": "Driver added.", "name": name, "mobile": mobile, "results": [dict(r) for r in rows]})
 
     @app.route("/api/vehicle", methods=["POST"])
     @login_required
@@ -900,11 +1009,11 @@ def create_app() -> Flask:
             execute(
                 """
                 UPDATE vehicles SET ftl_type=?, driver_name=?, driver_mobile=?, last_closing_km=?, opening_km=?,
-                tank_capacity=?, mileage=?, fuel_type=?, current_division_id=?, vehicle_type=?, updated_at=? WHERE id=?
+                tank_capacity=?, mileage=?, fuel_type=?, rc_number=?, current_division_id=?, vehicle_type=?, updated_at=? WHERE id=?
                 """,
                 (
                     data["ftl_type"], data["driver_name"], data["driver_mobile"], data["last_closing_km"],
-                    data["opening_km"], data["tank_capacity"], data["mileage"], data["fuel_type"],
+                    data["opening_km"], data["tank_capacity"], data["mileage"], data["fuel_type"], data["rc_number"],
                     data["current_division_id"], data["vehicle_type"], now, existing["id"]
                 ),
             )
@@ -914,13 +1023,13 @@ def create_app() -> Flask:
             vehicle_id = execute_returning_id(
                 """
                 INSERT INTO vehicles(vehicle_no, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km,
-                tank_capacity, mileage, fuel_type, current_division_id, vehicle_type, created_at, updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                tank_capacity, mileage, fuel_type, rc_number, current_division_id, vehicle_type, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     data["vehicle_no"], data["ftl_type"], data["driver_name"], data["driver_mobile"],
                     data["last_closing_km"], data["opening_km"], data["tank_capacity"], data["mileage"],
-                    data["fuel_type"], data["current_division_id"], data["vehicle_type"], now, now
+                    data["fuel_type"], data["rc_number"], data["current_division_id"], data["vehicle_type"], now, now
                 ),
             )
             action = "created"
@@ -1281,6 +1390,7 @@ def sanitize_vehicle_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "tank_capacity": to_float(payload.get("tank_capacity")),
         "mileage": to_float(payload.get("mileage")),
         "fuel_type": normalize_text(payload.get("fuel_type"))[:50],
+        "rc_number": normalize_text(payload.get("rc_number"))[:60],
         "current_division_id": int(payload.get("current_division_id") or session.get("current_division_id") or 1),
         "vehicle_type": normalize_text(payload.get("vehicle_type") or "SELF")[:50],
     }
@@ -1568,9 +1678,22 @@ CREATE TABLE IF NOT EXISTS payment_accounts(
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     acc_type TEXT NOT NULL DEFAULT 'CASH',
+    account_no TEXT DEFAULT '',
+    holder_name TEXT DEFAULT '',
+    ifsc TEXT DEFAULT '',
+    branch TEXT DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS drivers(
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    mobile TEXT DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    UNIQUE(name, mobile)
+);
+CREATE INDEX IF NOT EXISTS idx_drivers_name ON drivers(name);
 CREATE TABLE IF NOT EXISTS trip_processes(
     id SERIAL PRIMARY KEY,
     tp_no TEXT NOT NULL UNIQUE,
@@ -1659,6 +1782,9 @@ def init_db() -> None:
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mileage DOUBLE PRECISION DEFAULT 0")
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS fuel_type TEXT DEFAULT ''")
             cur.execute("ALTER TABLE trip_processes ADD COLUMN IF NOT EXISTS peshgi_json TEXT")
+            cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS rc_number TEXT DEFAULT ''")
+            for col in ["account_no", "holder_name", "ifsc", "branch"]:
+                cur.execute(f"ALTER TABLE payment_accounts ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
             now = datetime.utcnow().isoformat()
             for name in DIVISION_NAMES:
                 cur.execute("INSERT INTO divisions(name, active) VALUES(%s,1) ON CONFLICT (name) DO NOTHING", (name,))

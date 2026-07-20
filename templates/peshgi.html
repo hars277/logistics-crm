@@ -3,8 +3,7 @@
 <section class="page-card">
   <div class="page-head">
     <div>
-      <span class="eyebrow">TCI is managing by BEERU</span>
-      <h2>TCI Peshgi Expense</h2>
+      <h2>Peshgi Expense</h2>
     </div>
   </div>
 
@@ -13,8 +12,8 @@
       <div class="section-title"><h3>TCS / THC / LR Photos</h3></div>
       <div class="form-grid">
         <div class="field wide-field">
-          <label>TCS / THC / LR photos <span class="opt">(share on WhatsApp; side photos where TCS no. is visible)</span></label>
-          <input id="tcsPhotos" name="tcs_photos" type="file" accept="image/*,video/*" multiple>
+          <label>TCS / THC / LR photos <em class="req">*</em> <span class="opt">(side photos where TCS no. is clearly visible)</span></label>
+          <input id="tcsPhotos" name="tcs_photos" type="file" accept="image/*,video/*" multiple required>
           <div class="file-list" id="tcsPreview"></div>
         </div>
       </div>
@@ -43,11 +42,11 @@
       <div class="section-title"><h3>Expense Details</h3></div>
       <p class="hint" style="margin:-8px 0 16px">Total Peshgi auto-calculate hota hai. Hold optional. Diesel value Ltr me save hoti hai (paise me add nahi hoti).</p>
       <div class="form-grid">
-        <div class="field"><label>Labour <em class="req">*</em></label><input id="labour" name="labour" type="number" min="0" step="1" placeholder="0" required></div>
-        <div class="field"><label id="fuelAmountLabel">CNG Price <em class="req">*</em></label><input id="fuelAmount" name="fuel_amount" type="number" min="0" step="1" placeholder="0" required></div>
-        <div class="field"><label>Roti <em class="req">*</em></label><input id="roti" name="roti" type="number" min="0" step="1" placeholder="0" required></div>
-        <div class="field"><label>Babu <em class="req">*</em></label><input id="babu" name="babu" type="number" min="0" step="1" placeholder="0" required></div>
-        <div class="field"><label>Hold <span class="opt">(optional)</span></label><input id="hold" name="hold" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Labour <em class="req">*</em></label><input id="labour" name="labour" type="number" min="0" step="any" placeholder="0" required></div>
+        <div class="field"><label id="fuelAmountLabel">CNG Price <em class="req">*</em></label><input id="fuelAmount" name="fuel_amount" type="number" min="0" step="any" placeholder="0" required></div>
+        <div class="field"><label>Roti <em class="req">*</em></label><input id="roti" name="roti" type="number" min="0" step="any" placeholder="0" required></div>
+        <div class="field"><label>Babu <em class="req">*</em></label><input id="babu" name="babu" type="number" min="0" step="any" placeholder="0" required></div>
+        <div class="field"><label>Hold <span class="opt">(optional)</span></label><input id="hold" name="hold" type="number" min="0" step="any" placeholder="0"></div>
         <div class="field"><label>Total Peshgi <em class="req">*</em></label><input id="totalPeshgi" name="total_peshgi" type="number" readonly value="0"></div>
       </div>
     </section>

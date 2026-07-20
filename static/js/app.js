@@ -393,16 +393,98 @@
     row.appendChild(btn);
   }
 
+  // Show/hide the bank-only blanks in the voucher's Advance Amount section.
+  function applyPaymentMode() {
+    const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
+    const bankWrap = $('[data-field-wrap="paid_to_account"]');
+    if (bankWrap) {
+      bankWrap.style.display = mode === 'BANK' ? '' : 'none';
+      const inp = $('[name="paid_to_account"]', bankWrap);
+      if (inp) { inp.required = mode === 'BANK'; if (mode !== 'BANK') inp.value = ''; }
+    }
+    const accWrap = $('[data-field-wrap="payment_account"]');
+    if (accWrap) {
+      const lab = $('label', accWrap);
+      if (lab) lab.childNodes[0].nodeValue = mode === 'CASH' ? 'Cash Account ' : (mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider Account ');
+    }
+  }
+
   if (window.CRM_STEP === 'advance-voucher') {
     injectAddButton('payment_account', '+ Account', () => {
       const modal = $('#accountModal');
       const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
-      if ($('#accountForm [name="acc_type"]')) $('#accountForm [name="acc_type"]').value = mode;
+      const t = $('#accountForm [name="acc_type"]');
+      if (t) { t.value = mode; t.dispatchEvent(new Event('change')); }
       modal?.classList.remove('hidden');
     });
     populateAccounts($('[name="payment_account"]')?.value);
-    $$('[name="amount_paid_by"]').forEach(r => r.addEventListener('change', () => populateAccounts('')));
+    applyPaymentMode();
+    $$('[name="amount_paid_by"]').forEach(r => r.addEventListener('change', () => { populateAccounts(''); applyPaymentMode(); }));
+
+    // Driver master: turn the driver field into a picker with an "+ Driver" button.
+    injectAddButton('driver_name', '+ Driver', () => $('#driverModal')?.classList.remove('hidden'));
+    populateDrivers($('[name="driver_name"]')?.value);
   }
+
+  // ---- Driver master ----
+  async function populateDrivers(preserve) {
+    const el = $('[name="driver_name"]');
+    if (!el) return;
+    try {
+      const data = await api('/api/drivers');
+      const cur = preserve != null ? preserve : el.value;
+      if (el.tagName === 'SELECT') {
+        el.innerHTML = '<option value="">--Select Driver--</option>' + data.results.map(r => `<option value="${r.name}" data-mobile="${r.mobile || ''}">${r.name}${r.mobile ? ' · ' + r.mobile : ''}</option>`).join('');
+        if (cur && !Array.from(el.options).some(o => o.value === cur)) el.add(new Option(cur, cur));
+        el.value = cur || '';
+      } else {
+        // keep as free text but offer a datalist of known drivers
+        let dl = $('#driverList');
+        if (!dl) { dl = document.createElement('datalist'); dl.id = 'driverList'; document.body.appendChild(dl); el.setAttribute('list', 'driverList'); }
+        dl.innerHTML = data.results.map(r => `<option value="${r.name}">${r.mobile || ''}</option>`).join('');
+        el.dataset.drivers = JSON.stringify(data.results);
+      }
+    } catch (_) {}
+  }
+  // When a known driver is picked, fill the mobile automatically.
+  const driverEl = $('[name="driver_name"]');
+  if (driverEl) driverEl.addEventListener('change', () => {
+    const mobEl = $('[name="driver_mobile"]');
+    if (!mobEl) return;
+    let mobile = '';
+    if (driverEl.tagName === 'SELECT') mobile = driverEl.selectedOptions[0]?.dataset.mobile || '';
+    else {
+      try { mobile = (JSON.parse(driverEl.dataset.drivers || '[]').find(d => d.name === driverEl.value) || {}).mobile || ''; } catch (_) {}
+    }
+    if (mobile) mobEl.value = mobile;
+  });
+
+  const driverForm = $('#driverForm');
+  if (driverForm) driverForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      const data = await api('/api/drivers', { method: 'POST', body: JSON.stringify(serializeForm(driverForm)) });
+      $('#driverModal').classList.add('hidden');
+      const nm = data.name, mob = data.mobile;
+      driverForm.reset();
+      await populateDrivers(nm);
+      const de = $('[name="driver_name"]'); if (de) de.value = nm;
+      const me = $('[name="driver_mobile"]'); if (me && mob) me.value = mob;
+      toast(data.message, 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  // Account modal: only show bank blanks when type = BANK.
+  const accTypeSel = $('#accType');
+  function applyAccType() {
+    const isBank = accTypeSel && accTypeSel.value === 'BANK';
+    $$('#accountForm .bank-only').forEach(w => {
+      w.style.display = isBank ? '' : 'none';
+      const i = $('input', w);
+      if (i) { i.required = isBank; if (!isBank) i.value = ''; }
+    });
+  }
+  if (accTypeSel) { accTypeSel.addEventListener('change', applyAccType); applyAccType(); }
   if (window.CRM_STEP === 'advance-fuel') {
     injectAddButton('pump_name', '+ Pump', () => $('#pumpModal')?.classList.remove('hidden'));
     populatePumps($('[name="pump_name"]')?.value);

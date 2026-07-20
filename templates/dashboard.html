@@ -8,13 +8,52 @@
     </div>
     <a class="btn primary" href="{{ url_for('operations', step='advance-voucher') }}">Start New Trip</a>
   </div>
+
   <div class="metric-grid">
     <div class="metric"><span>Total Vehicles</span><strong>{{ counts.vehicles }}</strong></div>
     <div class="metric"><span>Total Trips</span><strong>{{ counts.trips }}</strong></div>
     <div class="metric"><span>Open Trips</span><strong>{{ counts.open_trips }}</strong></div>
     <div class="metric"><span>Saved PDFs</span><strong>{{ counts.pdfs }}</strong></div>
   </div>
-  <section class="form-section">
+
+  <div class="metric-grid" id="moneyTiles">
+    <div class="metric"><span>Total Freight</span><strong id="tFreight">₹0</strong></div>
+    <div class="metric"><span>Total Expense</span><strong id="tExpense">₹0</strong></div>
+    <div class="metric"><span>Profit / Loss</span><strong id="tProfit">₹0</strong></div>
+    <div class="metric"><span>Driver Expense</span><strong id="tDriver">₹0</strong></div>
+  </div>
+
+  <section class="form-section" style="padding:8px 24px 24px">
+    <div class="section-title"><h3>Analytics</h3></div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h4>Profit / Loss by Month</h4>
+        <div class="chart-box"><canvas id="chartPnl"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h4>Freight vs Expense (Top Vehicles)</h4>
+        <div class="chart-box"><canvas id="chartVehicles"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h4>Vehicles by Division</h4>
+        <div class="chart-box"><canvas id="chartDivisions"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h4>Trip Status</h4>
+        <div class="chart-box"><canvas id="chartStatus"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h4>Payment Accounts by Type</h4>
+        <div class="chart-box"><canvas id="chartAccounts"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h4>Overall Money Split</h4>
+        <div class="chart-box"><canvas id="chartOverall"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="form-section" style="padding:0 24px 24px">
     <div class="section-title"><h3>Recent Trips</h3></div>
     <div class="table-wrap">
       <table class="data-table">
@@ -30,4 +69,8 @@
     </div>
   </section>
 </section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

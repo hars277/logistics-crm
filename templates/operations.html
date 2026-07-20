@@ -67,7 +67,7 @@
                   </div>
                   <small class="hint vehicle-hint" id="vehicleHint"></small>
                 {% else %}
-                  <input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.type }}" value="{{ data.get(field.name, '') }}" {{ 'readonly' if field.readonly else '' }}>
+                  <input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.type }}" value="{{ data.get(field.name, '') }}" {{ 'step=any' if field.type=='number' else '' }} {{ 'readonly' if field.readonly else '' }}>
                 {% endif %}
               </div>
             {% endfor %}
@@ -95,6 +95,7 @@
     </div>
     <form id="vehicleForm" class="form-grid compact-grid">
       <div class="field"><label>Vehicle No. <em class="req">*</em></label><input name="vehicle_no" required></div>
+      <div class="field"><label>RC Number <em class="req">*</em></label><input name="rc_number" placeholder="RC / Registration certificate no." required></div>
       <div class="field"><label>FTL Type <em class="req">*</em></label>
         <select name="ftl_type" required>
           <option value="">--Select--</option>
@@ -145,16 +146,34 @@
 </div>
 
 <div class="modal hidden" id="accountModal" role="dialog" aria-modal="true">
-  <div class="modal-card small-modal">
+  <div class="modal-card">
     <div class="modal-head"><h3>Add Payment Account</h3><button class="ghost close-modal" type="button">×</button></div>
-    <form id="accountForm">
-      <div class="field"><label>Account Name</label><input name="name" required placeholder="e.g. HDFC BANK : 1234 : HDFC0001"></div>
-      <div class="field"><label>Account Type</label>
-        <select name="acc_type"><option value="CASH">CASH</option><option value="BANK">BANK</option><option value="FUEL">FUEL</option></select>
+    <form id="accountForm" class="form-grid compact-grid">
+      <div class="field"><label>Account Type <em class="req">*</em></label>
+        <select name="acc_type" id="accType"><option value="CASH">CASH</option><option value="BANK">BANK / ACCOUNTS</option><option value="FUEL">FUEL</option></select>
       </div>
-      <div class="modal-actions">
+      <div class="field"><label>Display Name <em class="req">*</em></label><input name="name" required placeholder="e.g. HDFC BANK - Ajay Transport"></div>
+      <div class="field bank-only"><label>Account No. <em class="req">*</em></label><input name="account_no" inputmode="numeric" placeholder="Bank account number"></div>
+      <div class="field bank-only"><label>Bank Holder Name <em class="req">*</em></label><input name="holder_name" placeholder="Account holder ka naam"></div>
+      <div class="field bank-only"><label>IFSC Code <em class="req">*</em></label><input name="ifsc" placeholder="e.g. HDFC0000501" style="text-transform:uppercase"></div>
+      <div class="field bank-only"><label>Branch Name <em class="req">*</em></label><input name="branch" placeholder="Branch"></div>
+      <div class="modal-actions full-row">
         <button class="btn secondary close-modal" type="button">Cancel</button>
         <button class="btn primary" type="submit">Save Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal hidden" id="driverModal" role="dialog" aria-modal="true">
+  <div class="modal-card small-modal">
+    <div class="modal-head"><h3>Add Driver</h3><button class="ghost close-modal" type="button">×</button></div>
+    <form id="driverForm">
+      <div class="field"><label>Driver Name <em class="req">*</em></label><input name="name" required placeholder="Driver ka naam"></div>
+      <div class="field"><label>Mobile No. <span class="opt">(10 digits)</span></label><input name="mobile" inputmode="numeric" maxlength="10" placeholder="10 digit mobile"></div>
+      <div class="modal-actions">
+        <button class="btn secondary close-modal" type="button">Cancel</button>
+        <button class="btn primary" type="submit">Save Driver</button>
       </div>
     </form>
   </div>

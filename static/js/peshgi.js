@@ -65,7 +65,7 @@
   }
 
   function buildMessage(d) {
-    const lines = ['🚚 *TCI Peshgi Expense*'];
+    const lines = ['🚚 *Peshgi Expense*'];
     const add = (label, value) => {
       const t = clean(value);
       if (!t || t === '0' || t === '₹0') return;
@@ -167,10 +167,10 @@
     try {
       if (navigator.share) {
         if (files.length && navigator.canShare && navigator.canShare({ files })) {
-          await navigator.share({ title: 'TCI Peshgi Expense', text: message, files });
+          await navigator.share({ title: 'Peshgi Expense', text: message, files });
           return;
         }
-        await navigator.share({ title: 'TCI Peshgi Expense', text: message });
+        await navigator.share({ title: 'Peshgi Expense', text: message });
         return;
       }
       window.open('https://wa.me/?text=' + encodeURIComponent(message), '_blank', 'noopener,noreferrer');
