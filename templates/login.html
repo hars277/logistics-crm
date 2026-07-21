@@ -39,6 +39,12 @@
     <p class="tiny center" style="margin-top:16px">
       <a href="{{ url_for('forgot_password') }}" style="color:var(--brand);font-weight:700">Forgot password?</a>
     </p>
+
+    {% if public_peshgi_url %}
+    <div class="login-divider"><span>or</span></div>
+    <a class="btn secondary wide" href="{{ public_peshgi_url }}" style="text-decoration:none">🔓 Peshgi Expense — bina login</a>
+    <p class="tiny center" style="margin-top:8px">Sirf Peshgi entry ke liye. Baaki CRM ke liye login karein.</p>
+    {% endif %}
   </main>
 </body>
 </html>

@@ -18,7 +18,7 @@
       <section class="form-section">
         <div class="section-title">
           <h3>{{ section.title }}</h3>
-          {% if section.table %}<button class="btn mini" type="button" data-add-line>Add Line</button>{% endif %}
+          {% if section.table %}<button class="btn mini secondary" type="button" data-add-line>+ Add Line</button>{% endif %}
         </div>
         {% if section.table %}
           <div class="line-table-wrap">
@@ -126,6 +126,7 @@
         <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
         <select name="division_id">{% for d in divisions %}<option value="{{ d.id }}" {{ 'selected' if current_division and d.id==current_division.id else '' }}>{{ d.name }}</option>{% endfor %}</select>
         <button class="btn neutral" type="submit">Upload CSV / Excel</button>
+        <a class="btn secondary" href="{{ url_for('sample_csv', kind='vehicles') }}" download>⬇ Sample CSV</a>
       </form>
       <div class="bulk-result" id="bulkResult"></div>
     </div>
@@ -166,16 +167,38 @@
 </div>
 
 <div class="modal hidden" id="driverModal" role="dialog" aria-modal="true">
-  <div class="modal-card small-modal">
-    <div class="modal-head"><h3>Add Driver</h3><button class="ghost close-modal" type="button">×</button></div>
-    <form id="driverForm">
-      <div class="field"><label>Driver Name <em class="req">*</em></label><input name="name" required placeholder="Driver ka naam"></div>
-      <div class="field"><label>Mobile No. <span class="opt">(10 digits)</span></label><input name="mobile" inputmode="numeric" maxlength="10" placeholder="10 digit mobile"></div>
-      <div class="modal-actions">
+  <div class="modal-card large-modal">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">Master Data</span>
+        <h3>Add / Update Driver</h3>
+      </div>
+      <button class="ghost close-modal" type="button">×</button>
+    </div>
+    <form id="driverForm" class="form-grid compact-grid">
+      <div class="field"><label>Driver Name <em class="req">*</em></label><input name="name" required placeholder="Driver ka poora naam"></div>
+      <div class="field"><label>Mobile No. <em class="req">*</em></label><input name="mobile" inputmode="numeric" maxlength="10" pattern="\d{10}" required placeholder="10 digit mobile"></div>
+      <div class="field"><label>Driver Code <span class="opt">(optional)</span></label><input name="driver_code" placeholder="e.g. ATC-D146"></div>
+      <div class="field"><label>Licence No. <em class="req">*</em></label><input name="licence_no" required placeholder="e.g. HR0120200012345"></div>
+      <div class="field"><label>Licence Expiry <em class="req">*</em></label><input name="licence_expiry" type="date" required></div>
+      <div class="field"><label>Aadhaar No. <span class="opt">(12 digits)</span></label><input name="aadhaar_no" inputmode="numeric" maxlength="12" placeholder="12 digit Aadhaar"></div>
+      <div class="field wide-field"><label>Address <span class="opt">(optional)</span></label><textarea name="address" rows="2" placeholder="Village / City / State"></textarea></div>
+      <div class="modal-actions full-row">
         <button class="btn secondary close-modal" type="button">Cancel</button>
         <button class="btn primary" type="submit">Save Driver</button>
       </div>
     </form>
+
+    <div class="bulk-box">
+      <h4>Bulk Driver Upload</h4>
+      <p class="hint">CSV/XLSX columns: name, mobile, driver_code, licence_no, licence_expiry, aadhaar_no, address. (name zaroori hai)</p>
+      <form id="bulkDriverForm" class="bulk-form">
+        <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
+        <button class="btn neutral" type="submit">Upload CSV / Excel</button>
+        <a class="btn secondary" href="{{ url_for('sample_csv', kind='drivers') }}" download>⬇ Sample CSV</a>
+      </form>
+      <div class="bulk-result" id="bulkDriverResult"></div>
+    </div>
   </div>
 </div>
 {% endblock %}

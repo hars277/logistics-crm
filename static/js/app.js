@@ -393,20 +393,32 @@
     row.appendChild(btn);
   }
 
-  // Show/hide the bank-only blanks in the voucher's Advance Amount section.
+  // CASH -> no account fields at all. BANK/FUEL -> show the matching account picker + blanks.
+  function showWrap(name, show, required) {
+    const wrap = $(`[data-field-wrap="${name}"]`);
+    if (!wrap) return;
+    wrap.style.display = show ? '' : 'none';
+    const el = $(`[name="${name}"]`, wrap);
+    if (el) {
+      el.required = !!(show && required);
+      if (!show) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }
+    }
+  }
   function applyPaymentMode() {
     const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
-    const bankWrap = $('[data-field-wrap="paid_to_account"]');
-    if (bankWrap) {
-      bankWrap.style.display = mode === 'BANK' ? '' : 'none';
-      const inp = $('[name="paid_to_account"]', bankWrap);
-      if (inp) { inp.required = mode === 'BANK'; if (mode !== 'BANK') inp.value = ''; }
-    }
+    const isCash = mode === 'CASH';
+    // The account picker only exists for BANK / FUEL.
+    showWrap('payment_account', !isCash, true);
+    showWrap('paid_to_account', mode === 'BANK', true);
     const accWrap = $('[data-field-wrap="payment_account"]');
     if (accWrap) {
       const lab = $('label', accWrap);
-      if (lab) lab.childNodes[0].nodeValue = mode === 'CASH' ? 'Cash Account ' : (mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider Account ');
+      if (lab && lab.childNodes[0]) lab.childNodes[0].nodeValue = mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider Account ';
     }
+    const hint = $('#paymentHint');
+    if (hint) hint.textContent = isCash
+      ? 'Cash payment — koi account detail zaroori nahi.'
+      : (mode === 'BANK' ? 'Bank account aur Paid To A/C No. bharna zaroori hai.' : 'Fuel provider / pump account chuniye.');
   }
 
   if (window.CRM_STEP === 'advance-voucher') {
@@ -457,6 +469,23 @@
       try { mobile = (JSON.parse(driverEl.dataset.drivers || '[]').find(d => d.name === driverEl.value) || {}).mobile || ''; } catch (_) {}
     }
     if (mobile) mobEl.value = mobile;
+  });
+
+  // Driver form: digits-only for mobile / aadhaar.
+  $$('#driverForm [name="mobile"]').forEach(i => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 10); }));
+  $$('#driverForm [name="aadhaar_no"]').forEach(i => i.addEventListener('input', () => { i.value = i.value.replace(/\D/g, '').slice(0, 12); }));
+
+  const bulkDriverForm = $('#bulkDriverForm');
+  if (bulkDriverForm) bulkDriverForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const result = $('#bulkDriverResult');
+    result.textContent = 'Uploading...';
+    try {
+      const data = await api('/api/driver/bulk', { method: 'POST', body: new FormData(bulkDriverForm), headers: { 'X-CSRF-Token': csrf } });
+      result.textContent = `Added/updated: ${data.added}${data.errors?.length ? ' · Errors: ' + data.errors.join(' | ') : ''}`;
+      await populateDrivers();
+      toast('Driver bulk upload completed.', 'success');
+    } catch (err) { result.textContent = err.message; toast(err.message, 'error'); }
   });
 
   const driverForm = $('#driverForm');
@@ -561,14 +590,7 @@
       const payable = n(d.payable_advance), paid = n(d.paid_advance);
       setVal('balance_advance', payable - paid);
       setVal('total_advance', paid);
-      const payMode = d.amount_paid_by || 'CASH';
-      const hint = $('#paymentHint');
-      if (hint) hint.textContent = payMode === 'BANK' ? 'Bank account and Paid To A/C No required.' : payMode === 'FUEL' ? 'Fuel provider / pump account selected.' : 'Cash account selected.';
-      const account = $('[name="payment_account"]');
-      if (account) {
-        if (payMode === 'BANK') account.title = 'Select bank account';
-        if (payMode === 'FUEL') account.title = 'Select fuel provider';
-      }
+      // payment hint / account visibility is handled by applyPaymentMode()
     }
     if (window.CRM_STEP === 'advance-fuel') {
       const amount = n(d.fuel_rate) * n(d.required_fuel_qty);

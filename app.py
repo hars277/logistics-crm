@@ -547,7 +547,11 @@ def create_app() -> Flask:
             else:
                 flash("Invalid user id or password.", "error")
         divisions = query_all("SELECT * FROM divisions WHERE active=1 ORDER BY name")
-        return render_template("login.html", divisions=divisions)
+        token = public_peshgi_token()
+        return render_template(
+            "login.html", divisions=divisions,
+            public_peshgi_url=url_for("peshgi_public", token=token) if token else "",
+        )
 
     @app.route("/forgot-password", methods=["GET", "POST"])
     def forgot_password():
@@ -994,31 +998,104 @@ def create_app() -> Flask:
         rows = query_all("SELECT id, name, acc_type, account_no, holder_name, ifsc, branch FROM payment_accounts WHERE active=1 AND acc_type=? ORDER BY name", (acc_type,))
         return jsonify({"ok": True, "message": "Account added.", "name": name, "results": [dict(r) for r in rows]})
 
+    DRIVER_COLS = "id, name, mobile, driver_code, licence_no, licence_expiry, aadhaar_no, address"
+
     @app.route("/api/drivers")
     @login_required
     def api_drivers():
         q = normalize_text(request.args.get("q"))
         if q:
-            rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 AND (name ILIKE ? OR mobile LIKE ?) ORDER BY name LIMIT 20", ("%" + q + "%", "%" + q + "%"))
+            rows = query_all(f"SELECT {DRIVER_COLS} FROM drivers WHERE active=1 AND (name ILIKE ? OR mobile LIKE ? OR driver_code ILIKE ?) ORDER BY name LIMIT 25", ("%" + q + "%", "%" + q + "%", "%" + q + "%"))
         else:
-            rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 ORDER BY name")
+            rows = query_all(f"SELECT {DRIVER_COLS} FROM drivers WHERE active=1 ORDER BY name")
         return jsonify({"ok": True, "results": [dict(r) for r in rows]})
 
     @app.route("/api/drivers", methods=["POST"])
     @login_required
     @csrf_required
     def api_driver_add():
-        payload = request.get_json(force=True) or {}
-        name = normalize_text(payload.get("name"))[:150]
-        mobile = re.sub(r"[^0-9]", "", normalize_text(payload.get("mobile")))[:10]
-        if not name:
+        d = sanitize_driver_payload(request.get_json(force=True) or {})
+        if not d["name"]:
             return jsonify({"ok": False, "message": "Driver name is required."}), 400
-        if mobile and len(mobile) != 10:
+        if d["mobile"] and len(d["mobile"]) != 10:
             return jsonify({"ok": False, "message": "Driver mobile must be exactly 10 digits."}), 400
-        execute("INSERT INTO drivers(name, mobile, active, created_at) VALUES(?,?,1,?) ON CONFLICT (name, mobile) DO NOTHING", (name, mobile, datetime.utcnow().isoformat()))
-        record_audit("DRIVER_ADD", "drivers", None, {"name": name, "mobile": mobile})
-        rows = query_all("SELECT id, name, mobile FROM drivers WHERE active=1 ORDER BY name")
-        return jsonify({"ok": True, "message": "Driver added.", "name": name, "mobile": mobile, "results": [dict(r) for r in rows]})
+        if d["aadhaar_no"] and len(d["aadhaar_no"]) != 12:
+            return jsonify({"ok": False, "message": "Aadhaar number must be 12 digits."}), 400
+        execute(
+            """INSERT INTO drivers(name, mobile, driver_code, licence_no, licence_expiry, aadhaar_no, address, active, created_at)
+            VALUES(?,?,?,?,?,?,?,1,?) ON CONFLICT (name, mobile) DO UPDATE SET
+            driver_code=EXCLUDED.driver_code, licence_no=EXCLUDED.licence_no, licence_expiry=EXCLUDED.licence_expiry,
+            aadhaar_no=EXCLUDED.aadhaar_no, address=EXCLUDED.address""",
+            (d["name"], d["mobile"], d["driver_code"], d["licence_no"], d["licence_expiry"], d["aadhaar_no"], d["address"], datetime.utcnow().isoformat()),
+        )
+        record_audit("DRIVER_ADD", "drivers", None, {"name": d["name"], "mobile": d["mobile"]})
+        rows = query_all(f"SELECT {DRIVER_COLS} FROM drivers WHERE active=1 ORDER BY name")
+        return jsonify({"ok": True, "message": "Driver saved.", "name": d["name"], "mobile": d["mobile"], "results": [dict(r) for r in rows]})
+
+    @app.route("/api/driver/bulk", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_driver_bulk():
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"ok": False, "message": "Upload CSV/XLSX file."}), 400
+        ext = Path(secure_filename(f.filename or "drivers")).suffix.lower()
+        if ext not in [".csv", ".xlsx", ".xlsm"]:
+            return jsonify({"ok": False, "message": "Only CSV or XLSX files are allowed."}), 400
+        rows = parse_vehicle_upload(f, ext)
+        added, errors = 0, []
+        now = datetime.utcnow().isoformat()
+        for i, row in enumerate(rows, start=2):
+            try:
+                d = sanitize_driver_payload({
+                    "name": row.get("name") or row.get("driver_name") or row.get("driver name") or "",
+                    "mobile": row.get("mobile") or row.get("driver_mobile") or row.get("mobile no") or "",
+                    "driver_code": row.get("driver_code") or row.get("driver code") or "",
+                    "licence_no": row.get("licence_no") or row.get("licence no") or row.get("license_no") or "",
+                    "licence_expiry": row.get("licence_expiry") or row.get("licence expiry") or "",
+                    "aadhaar_no": row.get("aadhaar_no") or row.get("aadhaar no") or row.get("aadhar_no") or "",
+                    "address": row.get("address") or "",
+                })
+                if not d["name"]:
+                    raise ValueError("Driver name missing")
+                if d["mobile"] and len(d["mobile"]) != 10:
+                    raise ValueError("Mobile must be 10 digits")
+                execute(
+                    """INSERT INTO drivers(name, mobile, driver_code, licence_no, licence_expiry, aadhaar_no, address, active, created_at)
+                    VALUES(?,?,?,?,?,?,?,1,?) ON CONFLICT (name, mobile) DO UPDATE SET
+                    driver_code=EXCLUDED.driver_code, licence_no=EXCLUDED.licence_no, licence_expiry=EXCLUDED.licence_expiry,
+                    aadhaar_no=EXCLUDED.aadhaar_no, address=EXCLUDED.address""",
+                    (d["name"], d["mobile"], d["driver_code"], d["licence_no"], d["licence_expiry"], d["aadhaar_no"], d["address"], now),
+                )
+                added += 1
+            except Exception as exc:
+                errors.append(f"Row {i}: {exc}")
+        record_audit("DRIVER_BULK_UPLOAD", "drivers", None, {"added": added, "errors": errors[:20]})
+        return jsonify({"ok": True, "added": added, "errors": errors[:20]})
+
+    @app.route("/sample/<kind>.csv")
+    @login_required
+    def sample_csv(kind: str):
+        """Downloadable CSV templates for bulk upload."""
+        if kind == "vehicles":
+            head = "vehicle_no,ftl_type,fuel_type,tank_capacity,mileage,rc_number,driver_name,driver_mobile,last_closing_km,opening_km,division_id,vehicle_type"
+            rows = [
+                "HR55AB1234,32 FEET MXL,DIESEL,300,4,RC123456789,RAMESH KUMAR,9876543210,45000,45001,2,SELF",
+                "RJ14CD5678,20 FEET,CNG,120,3.5,RC987654321,SURESH YADAV,9988776655,12000,12001,5,ATTACHED",
+            ]
+        elif kind == "drivers":
+            head = "name,mobile,driver_code,licence_no,licence_expiry,aadhaar_no,address"
+            rows = [
+                "RAMESH KUMAR,9876543210,ATC-D101,HR0120200012345,2030-05-31,123456789012,Village Dharuhera Rewari",
+                "SURESH YADAV,9988776655,ATC-D102,RJ1420190067890,2028-11-15,987654321098,Jaipur Rajasthan",
+            ]
+        else:
+            abort(404)
+        csv_text = head + "\n" + "\n".join(rows) + "\n"
+        return Response(
+            csv_text, mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=sample_{kind}.csv"},
+        )
 
     @app.route("/api/vehicle", methods=["POST"])
     @login_required
@@ -1426,6 +1503,18 @@ def sanitize_vehicle_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def sanitize_driver_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": normalize_text(payload.get("name"))[:150].upper(),
+        "mobile": re.sub(r"[^0-9]", "", normalize_text(payload.get("mobile")))[:10],
+        "driver_code": normalize_text(payload.get("driver_code"))[:40],
+        "licence_no": normalize_text(payload.get("licence_no"))[:40],
+        "licence_expiry": normalize_text(payload.get("licence_expiry"))[:20],
+        "aadhaar_no": re.sub(r"[^0-9]", "", normalize_text(payload.get("aadhaar_no")))[:12],
+        "address": normalize_text(payload.get("address"))[:300],
+    }
+
+
 def find_vehicle(vehicle_no: str) -> Row | None:
     return query_one("SELECT * FROM vehicles WHERE vehicle_no=?", (normalize_vehicle_no(vehicle_no),))
 
@@ -1747,6 +1836,11 @@ CREATE TABLE IF NOT EXISTS drivers(
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     mobile TEXT DEFAULT '',
+    driver_code TEXT DEFAULT '',
+    licence_no TEXT DEFAULT '',
+    licence_expiry TEXT DEFAULT '',
+    aadhaar_no TEXT DEFAULT '',
+    address TEXT DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     UNIQUE(name, mobile)
@@ -1847,6 +1941,8 @@ def init_db() -> None:
             cur.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS rc_number TEXT DEFAULT ''")
             for col in ["account_no", "holder_name", "ifsc", "branch"]:
                 cur.execute(f"ALTER TABLE payment_accounts ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
+            for col in ["driver_code", "licence_no", "licence_expiry", "aadhaar_no", "address"]:
+                cur.execute(f"ALTER TABLE drivers ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
             now = datetime.utcnow().isoformat()
             for name in DIVISION_NAMES:
                 cur.execute("INSERT INTO divisions(name, active) VALUES(%s,1) ON CONFLICT (name) DO NOTHING", (name,))
