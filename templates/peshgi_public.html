@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Peshgi Expense</title>
+  <script>
+    (function () {
+      try { document.documentElement.setAttribute('data-theme', localStorage.getItem('crm_theme') || 'dark'); }
+      catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="public-body">
+  <div class="public-wrap">
+    <header class="public-head">
+      <div class="brand-mark small">AT</div>
+      <div>
+        <strong>AJAY TRANSPORT</strong>
+        <span>Peshgi Expense Entry</span>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" title="Light / dark">🌙</button>
+    </header>
+
+    <section class="page-card">
+      <div class="page-head"><div><h2>Peshgi Expense</h2></div></div>
+
+      <form id="peshgiForm" class="operation-form" autocomplete="off"
+            data-endpoint="{{ url_for('api_peshgi_public_save') }}?token={{ token }}">
+        <section class="form-section">
+          <div class="section-title"><h3>TCS / THC / LR Photos</h3></div>
+          <div class="form-grid">
+            <div class="field wide-field">
+              <label>TCS / THC / LR photos <em class="req">*</em> <span class="opt">(side photos where TCS no. is clearly visible)</span></label>
+              <input id="tcsPhotos" name="tcs_photos" type="file" accept="image/*,video/*" multiple required>
+              <div class="file-list" id="tcsPreview"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><h3>Trip Details</h3></div>
+          <div class="form-grid">
+            <div class="field"><label>TCS / THC / LR No. <span class="opt">(optional)</span></label><input id="tcsNo" name="tcs_no" placeholder="Example: LR12345"></div>
+            <div class="field"><label>Vehicle No. <em class="req">*</em></label><input id="vehicleNo" name="vehicle_no" placeholder="HR55AB1234" required></div>
+            <div class="field"><label>Driver Name <em class="req">*</em></label><input id="driverName" name="driver_name" placeholder="Driver name" required></div>
+            <div class="field"><label>Driver Mob. No. <em class="req">*</em></label><input id="driverMobile" name="driver_mobile" inputmode="numeric" maxlength="10" placeholder="10 digit mobile no." required></div>
+            <div class="field"><label>From <em class="req">*</em></label><input id="fromPlace" name="from_place" placeholder="Loading place" required></div>
+            <div class="field"><label>To <em class="req">*</em></label><input id="toPlace" name="to_place" placeholder="Unloading place" required></div>
+            <div class="field"><label>Date <em class="req">*</em></label><input id="entryDate" name="entry_date" type="date" value="{{ today }}" required></div>
+            <div class="field"><label>Fuel Type <em class="req">*</em></label>
+              <div class="radio-row">
+                <label><input type="radio" name="fuel_type" value="CNG" checked> CNG</label>
+                <label><input type="radio" name="fuel_type" value="Diesel"> Diesel</label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><h3>Expense Details</h3></div>
+          <p class="hint" style="margin:-8px 0 16px">Total Peshgi auto-calculate hota hai. Hold optional. Diesel value Ltr me save hoti hai.</p>
+          <div class="form-grid">
+            <div class="field"><label>Labour <em class="req">*</em></label><input id="labour" name="labour" type="number" min="0" step="any" placeholder="0" required></div>
+            <div class="field"><label id="fuelAmountLabel">CNG Price <em class="req">*</em></label><input id="fuelAmount" name="fuel_amount" type="number" min="0" step="any" placeholder="0" required></div>
+            <div class="field"><label>Roti <em class="req">*</em></label><input id="roti" name="roti" type="number" min="0" step="any" placeholder="0" required></div>
+            <div class="field"><label>Babu <em class="req">*</em></label><input id="babu" name="babu" type="number" min="0" step="any" placeholder="0" required></div>
+            <div class="field"><label>Hold <span class="opt">(optional)</span></label><input id="hold" name="hold" type="number" min="0" step="any" placeholder="0"></div>
+            <div class="field"><label>Total Peshgi <em class="req">*</em></label><input id="totalPeshgi" name="total_peshgi" type="number" readonly value="0"></div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><h3>Payment</h3></div>
+          <div class="form-grid">
+            <div class="field wide-field"><label>Payment Receiving / Acc. No. / UPI <span class="opt">(optional)</span></label><input id="paymentReceiving" name="payment_receiving" placeholder="Account No. / UPI ID"></div>
+            <div class="field wide-field">
+              <label>Payment QR Code Image <span class="opt">(optional)</span></label>
+              <input id="qrPhoto" name="qr_photo" type="file" accept="image/*">
+              <div class="file-list" id="qrPreview"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="sticky-actions">
+          <button class="btn secondary" type="button" id="peshgiClear">Clear</button>
+          <button class="btn neutral" type="button" id="peshgiCopy">Copy Message</button>
+          <button class="btn primary" type="submit" id="peshgiSend">Save &amp; Send on WhatsApp</button>
+        </div>
+      </form>
+
+      <section class="form-section" style="padding:0 24px 24px">
+        <div class="section-title"><h3>WhatsApp Preview</h3><span class="badge" id="liveTotal">₹0</span></div>
+        <pre id="messagePreview" class="preview-pre"></pre>
+        <p id="peshgiSaved" class="hint" style="margin-top:12px"></p>
+      </section>
+    </section>
+
+    <p class="hint center" style="padding:18px 0 30px">Ye form sirf Peshgi entry ke liye hai. Baaki CRM ke liye login karein.</p>
+  </div>
+  <script src="{{ url_for('static', filename='js/peshgi.js') }}"></script>
+  <script>
+    // Theme toggle for this standalone page.
+    (function () {
+      var b = document.getElementById('themeToggle');
+      if (!b) return;
+      var icon = function () {
+        var t = document.documentElement.getAttribute('data-theme') || 'dark';
+        b.textContent = t === 'dark' ? '🌙' : '☀️';
+      };
+      icon();
+      b.addEventListener('click', function () {
+        var next = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('crm_theme', next); } catch (e) {}
+        icon();
+      });
+    })();
+  </script>
+</body>
+</html>

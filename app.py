@@ -588,7 +588,9 @@ def create_app() -> Flask:
             ORDER BY tp.updated_at DESC LIMIT 10
             """
         )
-        return render_template("dashboard.html", counts=counts, recent=recent)
+        token = public_peshgi_token()
+        public_url = url_for("peshgi_public", token=token, _external=True) if token else ""
+        return render_template("dashboard.html", counts=counts, recent=recent, public_peshgi_url=public_url)
 
     @app.route("/api/dashboard/stats")
     @login_required
@@ -663,10 +665,8 @@ def create_app() -> Flask:
     def peshgi():
         return render_template("peshgi.html", today=datetime.now().strftime("%Y-%m-%d"))
 
-    @app.route("/api/peshgi/save", methods=["POST"])
-    @login_required
-    @csrf_required
-    def api_peshgi_save():
+    def _peshgi_save(division_id: int | None, user_id: int | None, enforce_division: bool):
+        """Shared Peshgi save used by the logged-in form and the public link form."""
         # Accept multipart (with photos) or JSON.
         if request.files or request.form:
             p = sanitize_step_data({k: v for k, v in request.form.items()})
@@ -679,9 +679,16 @@ def create_app() -> Flask:
         if mobile and len(mobile) != 10:
             return jsonify({"ok": False, "message": "Driver mobile must be exactly 10 digits."}), 400
 
-        current_div_id = session["current_division_id"]
         vehicle = find_vehicle(vehicle_no)
-        if vehicle and vehicle["current_division_id"] != current_div_id:
+        # Public submissions follow the vehicle's own division instead of a session.
+        if vehicle and not enforce_division:
+            current_div_id = vehicle["current_division_id"]
+        else:
+            current_div_id = division_id
+        if not current_div_id:
+            fallback = query_one("SELECT id FROM divisions WHERE active=1 ORDER BY id LIMIT 1")
+            current_div_id = fallback["id"] if fallback else 1
+        if enforce_division and vehicle and vehicle["current_division_id"] != current_div_id:
             division = query_one("SELECT * FROM divisions WHERE id=?", (vehicle["current_division_id"],))
             return jsonify({
                 "ok": False, "code": "division_mismatch",
@@ -698,7 +705,7 @@ def create_app() -> Flask:
             )
             vehicle = query_one("SELECT * FROM vehicles WHERE id=?", (new_id,))
 
-        div = get_current_division()
+        div = query_one("SELECT * FROM divisions WHERE id=?", (current_div_id,))
         route = " - ".join([x for x in [normalize_text(p.get("from_place")), normalize_text(p.get("to_place"))] if x])
         total = normalize_text(p.get("total_peshgi")) or "0"
         # Peshgi raw data (stored + carried into operations autofill).
@@ -745,12 +752,13 @@ def create_app() -> Flask:
             )
             trip_id = open_trip["id"]
         else:
-            tp_no = next_tp_no()
+            # Pass the division explicitly — public submissions have no session.
+            tp_no = next_tp_no(None, div)
             voucher["tp_no"] = tp_no
             trip_id = execute_returning_id(
                 """INSERT INTO trip_processes(tp_no, vehicle_id, division_id, status, current_step, voucher_json, peshgi_json, created_by, created_at, updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                (tp_no, vehicle["id"], current_div_id, "In Progress", "advance-voucher", json.dumps(voucher), json.dumps(peshgi), session["user_id"], now, now),
+                (tp_no, vehicle["id"], current_div_id, "In Progress", "advance-voucher", json.dumps(voucher), json.dumps(peshgi), user_id, now, now),
             )
         # Save uploaded photos (TCS/THC/LR + QR) into the database, linked to this trip.
         saved_photos = []
@@ -768,7 +776,7 @@ def create_app() -> Flask:
             fname = secure_filename(fs.filename)[:200] or f"{kind}.jpg"
             pid = execute_returning_id(
                 "INSERT INTO trip_photos(tp_no, trip_id, kind, filename, mime, photo_blob, created_by, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (tp_no, trip_id, kind, fname, mime, psycopg2.Binary(blob), session["user_id"], now),
+                (tp_no, trip_id, kind, fname, mime, psycopg2.Binary(blob), user_id, now),
             )
             saved_photos.append({"id": pid, "kind": kind, "filename": fname, "url": url_for("trip_photo", photo_id=pid)})
 
@@ -777,6 +785,28 @@ def create_app() -> Flask:
             "ok": True, "tp_no": tp_no, "photos": saved_photos,
             "message": f"Peshgi saved & voucher created. TP No: {tp_no}" + (f" ({len(saved_photos)} photo saved)" if saved_photos else ""),
         })
+
+    @app.route("/api/peshgi/save", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_peshgi_save():
+        return _peshgi_save(session.get("current_division_id"), session.get("user_id"), enforce_division=True)
+
+    # ---------- Public (no-login) Peshgi form, protected by a secret link token ----------
+    @app.route("/p/<token>")
+    def peshgi_public(token: str):
+        if not check_public_token(token):
+            abort(404)
+        return render_template("peshgi_public.html", today=datetime.now().strftime("%Y-%m-%d"), token=token)
+
+    @app.route("/api/peshgi/public-save", methods=["POST"])
+    def api_peshgi_public_save():
+        token = request.args.get("token") or request.form.get("token", "")
+        if not check_public_token(token):
+            return jsonify({"ok": False, "message": "Invalid or expired link."}), 403
+        if not public_rate_ok(request.remote_addr or "?"):
+            return jsonify({"ok": False, "message": "Bahut zyada requests. Thodi der baad try karein."}), 429
+        return _peshgi_save(None, None, enforce_division=False)
 
     @app.route("/photo/<int:photo_id>")
     @login_required
@@ -1400,6 +1430,34 @@ def find_vehicle(vehicle_no: str) -> Row | None:
     return query_one("SELECT * FROM vehicles WHERE vehicle_no=?", (normalize_vehicle_no(vehicle_no),))
 
 
+def get_setting(key: str, default: str = "") -> str:
+    row = query_one("SELECT value FROM app_settings WHERE key=?", (key,))
+    return row["value"] if row else default
+
+
+def public_peshgi_token() -> str:
+    return get_setting("peshgi_public_token", "")
+
+
+def check_public_token(token: str) -> bool:
+    """Constant-time compare of the public link token."""
+    real = public_peshgi_token()
+    return bool(real) and bool(token) and secrets.compare_digest(str(token), real)
+
+
+# Very small in-memory guard so an open link can't be spammed endlessly.
+_PUBLIC_HITS: Dict[str, List[float]] = {}
+
+
+def public_rate_ok(ip: str, limit: int = 30, window: int = 3600) -> bool:
+    import time
+    now_ts = time.time()
+    hits = [t for t in _PUBLIC_HITS.get(ip, []) if now_ts - t < window]
+    hits.append(now_ts)
+    _PUBLIC_HITS[ip] = hits[-limit:]
+    return len(hits) <= limit
+
+
 def open_trip_for_vehicle(vehicle_id: int) -> Row | None:
     """The vehicle's in-progress trip (not yet closed via trip-expense), if any."""
     return query_one(
@@ -1694,6 +1752,10 @@ CREATE TABLE IF NOT EXISTS drivers(
     UNIQUE(name, mobile)
 );
 CREATE INDEX IF NOT EXISTS idx_drivers_name ON drivers(name);
+CREATE TABLE IF NOT EXISTS app_settings(
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS trip_processes(
     id SERIAL PRIMARY KEY,
     tp_no TEXT NOT NULL UNIQUE,
@@ -1788,6 +1850,11 @@ def init_db() -> None:
             now = datetime.utcnow().isoformat()
             for name in DIVISION_NAMES:
                 cur.execute("INSERT INTO divisions(name, active) VALUES(%s,1) ON CONFLICT (name) DO NOTHING", (name,))
+            # Secret token for the no-login (public) Peshgi form link.
+            cur.execute(
+                "INSERT INTO app_settings(key, value) VALUES('peshgi_public_token', %s) ON CONFLICT (key) DO NOTHING",
+                (secrets.token_urlsafe(24),),
+            )
             for pump in PUMP_SEED:
                 cur.execute("INSERT INTO pumps(name, active, created_at) VALUES(%s,1,%s) ON CONFLICT (name) DO NOTHING", (pump, now))
             for acc_name, acc_type in PAYMENT_ACCOUNT_SEED:

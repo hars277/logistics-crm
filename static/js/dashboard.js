@@ -123,6 +123,15 @@
     });
   }
 
+  // Copy the no-login Peshgi link.
+  const copyBtn = document.getElementById('copyPeshgiLink');
+  if (copyBtn) copyBtn.addEventListener('click', async () => {
+    const inp = document.getElementById('publicPeshgiLink');
+    try { await navigator.clipboard.writeText(inp.value); copyBtn.textContent = 'Copied ✓'; }
+    catch (_) { inp.select(); document.execCommand('copy'); copyBtn.textContent = 'Copied ✓'; }
+    setTimeout(() => { copyBtn.textContent = 'Copy Link'; }, 1800);
+  });
+
   let cached = null;
   async function load() {
     try {

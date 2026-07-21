@@ -6,7 +6,18 @@
       <span class="eyebrow">Secure workspace</span>
       <h2>Operations Dashboard</h2>
     </div>
-    <a class="btn primary" href="{{ url_for('operations', step='advance-voucher') }}">Start New Trip</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn secondary" id="openPublicPeshgi" href="{{ public_peshgi_url }}" target="_blank" rel="noopener">🔓 Peshgi Form (No Login)</a>
+      <a class="btn primary" href="{{ url_for('operations', step='advance-voucher') }}">Start New Trip</a>
+    </div>
+  </div>
+
+  <div style="margin:0 24px 4px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2)">
+    <div class="hint" style="margin-bottom:8px"><b>No-login Peshgi link</b> — ye link drivers/staff ko bhejo, wo bina login ke sirf Peshgi form bhar payenge (baaki CRM locked rahega).</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="publicPeshgiLink" readonly value="{{ public_peshgi_url }}" style="flex:1;min-width:240px;border:1px solid var(--field-line);border-radius:10px;padding:9px 12px;background:var(--field-bg);color:var(--ink)">
+      <button class="btn mini secondary" type="button" id="copyPeshgiLink">Copy Link</button>
+    </div>
   </div>
 
   <div class="metric-grid">

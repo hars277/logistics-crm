@@ -152,11 +152,10 @@
     Array.from(F.tcsPhotos.files || []).forEach((f) => fd.append('tcs_photos', f));
     if (F.qrPhoto.files && F.qrPhoto.files[0]) fd.append('qr_photo', F.qrPhoto.files[0]);
 
-    const res = await fetch('/api/peshgi/save', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': csrf },   // browser sets multipart Content-Type
-      body: fd,
-    });
+    // Public (no-login) page posts to its token endpoint; logged-in page uses the normal one.
+    const endpoint = form.dataset.endpoint || '/api/peshgi/save';
+    const headers = csrf ? { 'X-CSRF-Token': csrf } : {};   // browser sets multipart Content-Type
+    const res = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers, body: fd });
     const data = await res.json();
     if (!res.ok || data.ok === false) { const e = new Error(data.message || 'Save failed'); e.data = data; throw e; }
     return data;
@@ -197,8 +196,9 @@
       toast(`Saved ✓ Voucher banaya — TP: ${saved.tp_no}` + (nPhotos ? ` (${nPhotos} photo)` : ''), 'success');
       const savedEl = $('peshgiSaved');
       if (savedEl && saved.tp_no) {
+        const isPublic = !!form.dataset.endpoint;   // no gallery link on the public page
         savedEl.innerHTML = `✅ Saved in database — <b>${saved.tp_no}</b>` +
-          (nPhotos ? ` · <a href="/trip/${saved.tp_no}/photos" target="_blank" style="color:var(--brand);font-weight:700">${nPhotos} photo dekho</a>` : '');
+          (nPhotos && !isPublic ? ` · <a href="/trip/${saved.tp_no}/photos" target="_blank" style="color:var(--brand);font-weight:700">${nPhotos} photo dekho</a>` : (nPhotos ? ` · ${nPhotos} photo saved` : ''));
       }
       const message = buildMessage(getData());
       await shareOnWhatsApp(message);
@@ -231,7 +231,7 @@
   F.vehicleNo.addEventListener('blur', async () => {
     const v = F.vehicleNo.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     F.vehicleNo.value = v;
-    if (v.length < 4) return;
+    if (v.length < 4 || form.dataset.endpoint) return;   // lookup API needs login
     try {
       const res = await fetch(`/api/vehicle/${encodeURIComponent(v)}`, { credentials: 'same-origin' });
       const data = await res.json();
