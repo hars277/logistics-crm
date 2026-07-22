@@ -406,19 +406,20 @@
   }
   function applyPaymentMode() {
     const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
-    const isCash = mode === 'CASH';
-    // The account picker only exists for BANK / FUEL.
-    showWrap('payment_account', !isCash, true);
+    // Account dropdown is always visible but strictly filtered to the selected type.
+    showWrap('payment_account', true, true);
+    // "Paid To A/C No." is a bank-only blank.
     showWrap('paid_to_account', mode === 'BANK', true);
     const accWrap = $('[data-field-wrap="payment_account"]');
     if (accWrap) {
       const lab = $('label', accWrap);
-      if (lab && lab.childNodes[0]) lab.childNodes[0].nodeValue = mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider Account ';
+      const txt = mode === 'CASH' ? 'Cash Account ' : (mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider ');
+      if (lab && lab.childNodes[0]) lab.childNodes[0].nodeValue = txt;
     }
     const hint = $('#paymentHint');
-    if (hint) hint.textContent = isCash
-      ? 'Cash payment — koi account detail zaroori nahi.'
-      : (mode === 'BANK' ? 'Bank account aur Paid To A/C No. bharna zaroori hai.' : 'Fuel provider / pump account chuniye.');
+    if (hint) hint.textContent = mode === 'CASH'
+      ? 'Cash account chuniye.'
+      : (mode === 'BANK' ? 'Bank account chuniye aur Paid To A/C No. bharein.' : 'Fuel provider / pump account chuniye.');
   }
 
   if (window.CRM_STEP === 'advance-voucher') {

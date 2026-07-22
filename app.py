@@ -600,6 +600,7 @@ def create_app() -> Flask:
     @login_required
     def api_dashboard_stats():
         """Aggregates for the dashboard charts (P&L = trip freight - trip expense)."""
+        start_iso, end_iso, range_label = dashboard_range(request.args.get("range", "all"))
         trips = query_all(
             """
             SELECT tp.tp_no, tp.status, tp.created_at, tp.trip_creation_json, tp.expense_json, tp.peshgi_json,
@@ -607,14 +608,18 @@ def create_app() -> Flask:
             FROM trip_processes tp
             LEFT JOIN vehicles v ON v.id = tp.vehicle_id
             LEFT JOIN divisions d ON d.id = tp.division_id
-            ORDER BY tp.created_at DESC LIMIT 500
-            """
+            WHERE (%s IS NULL OR tp.created_at >= %s) AND (%s IS NULL OR tp.created_at < %s)
+            ORDER BY tp.created_at DESC LIMIT 2000
+            """,
+            (start_iso, start_iso, end_iso, end_iso),
         )
         by_month: Dict[str, Dict[str, float]] = {}
         by_vehicle: Dict[str, Dict[str, float]] = {}
+        status_counts: Dict[str, int] = {}
         driver_expense = 0.0
         total_freight = total_expense = total_peshgi = 0.0
         for t in trips:
+            status_counts[t.get("status") or "?"] = status_counts.get(t.get("status") or "?", 0) + 1
             def load(col):
                 try:
                     return json.loads(t.get(col) or "{}")
@@ -641,7 +646,6 @@ def create_app() -> Flask:
 
         months = sorted(by_month.keys())[-12:]
         top_vehicles = sorted(by_vehicle.items(), key=lambda kv: kv[1]["freight"], reverse=True)[:8]
-        status_rows = query_all("SELECT status, COUNT(*) AS c FROM trip_processes GROUP BY status")
         div_rows = query_all(
             """SELECT d.name, COUNT(v.id) AS c FROM divisions d
                LEFT JOIN vehicles v ON v.current_division_id = d.id GROUP BY d.name ORDER BY d.name"""
@@ -649,6 +653,8 @@ def create_app() -> Flask:
         acc_rows = query_all("SELECT acc_type, COUNT(*) AS c FROM payment_accounts WHERE active=1 GROUP BY acc_type")
         return jsonify({
             "ok": True,
+            "range_label": range_label,
+            "trip_count": len(trips),
             "totals": {
                 "freight": round(total_freight, 2),
                 "expense": round(total_expense, 2),
@@ -659,7 +665,7 @@ def create_app() -> Flask:
             "months": months,
             "monthly": [{"month": m, **{k: round(v, 2) for k, v in by_month[m].items()}} for m in months],
             "vehicles": [{"vehicle_no": k, "freight": round(v["freight"], 2), "expense": round(v["expense"], 2), "trips": v["trips"]} for k, v in top_vehicles],
-            "status": [{"status": r["status"], "count": r["c"]} for r in status_rows],
+            "status": [{"status": s, "count": c} for s, c in sorted(status_counts.items())],
             "divisions": [{"name": r["name"], "count": r["c"]} for r in div_rows],
             "accounts": [{"acc_type": r["acc_type"], "count": r["c"]} for r in acc_rows],
         })
@@ -1517,6 +1523,33 @@ def sanitize_driver_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def find_vehicle(vehicle_no: str) -> Row | None:
     return query_one("SELECT * FROM vehicles WHERE vehicle_no=?", (normalize_vehicle_no(vehicle_no),))
+
+
+def dashboard_range(r: str) -> Tuple[str | None, str | None, str]:
+    """Return (start_iso, end_iso, label) UTC cutoffs for a dashboard duration filter.
+
+    created_at is stored as naive-UTC ISO, so cutoffs are computed in UTC. Day windows
+    (today/yesterday) are aligned to IST midnight since the business is in India."""
+    from datetime import timedelta
+    ist = timedelta(hours=5, minutes=30)
+    now_utc = datetime.utcnow()
+    now_ist = now_utc + ist
+
+    def ist_midnight_utc(d):
+        return (datetime(d.year, d.month, d.day) - ist).isoformat()
+
+    r = (r or "all").lower()
+    if r == "today":
+        return ist_midnight_utc(now_ist), None, "Today"
+    if r == "yesterday":
+        y = now_ist - timedelta(days=1)
+        return ist_midnight_utc(y), ist_midnight_utc(now_ist), "Yesterday"
+    windows = {"7d": (7, "Past 1 Week"), "30d": (30, "Past 1 Month"),
+               "1y": (365, "Past 1 Year"), "5y": (365 * 5, "Past 5 Years")}
+    if r in windows:
+        days, label = windows[r]
+        return (now_utc - timedelta(days=days)).isoformat(), None, label
+    return None, None, "All Time"
 
 
 def get_setting(key: str, default: str = "") -> str:

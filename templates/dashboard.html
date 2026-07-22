@@ -35,7 +35,18 @@
   </div>
 
   <section class="form-section" style="padding:8px 24px 24px">
-    <div class="section-title"><h3>Analytics</h3></div>
+    <div class="section-title" style="flex-wrap:wrap;gap:10px">
+      <h3>Analytics <span class="hint" id="rangeLabel" style="font-weight:500"></span></h3>
+      <select id="rangeSelect" style="height:38px;border:1px solid var(--line);border-radius:10px;background:var(--field-bg);color:var(--ink);padding:0 12px;font-weight:600">
+        <option value="today">Today</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="7d">Past 1 Week</option>
+        <option value="30d">Past 1 Month</option>
+        <option value="1y">Past 1 Year</option>
+        <option value="5y">Past 5 Years</option>
+        <option value="all" selected>All Time</option>
+      </select>
+    </div>
     <div class="chart-grid">
       <div class="chart-card">
         <h4>Profit / Loss by Month</h4>

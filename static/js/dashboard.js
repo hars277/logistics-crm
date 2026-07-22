@@ -133,14 +133,21 @@
   });
 
   let cached = null;
+  const rangeSel = document.getElementById('rangeSelect');
   async function load() {
+    const range = rangeSel ? rangeSel.value : 'all';
     try {
-      const res = await fetch('/api/dashboard/stats', { credentials: 'same-origin' });
+      const res = await fetch('/api/dashboard/stats?range=' + encodeURIComponent(range), { credentials: 'same-origin' });
       cached = await res.json();
-      if (cached.ok) render(cached);
+      if (cached.ok) {
+        render(cached);
+        const lbl = document.getElementById('rangeLabel');
+        if (lbl) lbl.textContent = `· ${cached.range_label} (${cached.trip_count} trips)`;
+      }
     } catch (_) {}
   }
   load();
+  if (rangeSel) rangeSel.addEventListener('change', load);
 
   // Redraw with new colours when the theme is toggled.
   const themeBtn = document.getElementById('themeToggle');
