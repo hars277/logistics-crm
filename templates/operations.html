@@ -52,10 +52,10 @@
                 {% elif field.type == 'payment' %}
                   <div class="radio-row payment-row">
                     {% for opt in field.options %}
-                      <label><input type="radio" name="{{ field.name }}" value="{{ opt }}" {{ 'checked' if data.get(field.name)==opt else '' }}> {{ opt }}</label>
+                      <label><input type="radio" name="{{ field.name }}" value="{{ opt }}" {{ 'checked' if data.get(field.name)==opt else '' }}> {{ 'ACCOUNT' if opt=='BANK' else opt }}</label>
                     {% endfor %}
                   </div>
-                  <small class="hint" id="paymentHint">Cash account selected.</small>
+                  <small class="hint" id="paymentHint"></small>
                 {% elif field.type == 'textarea' %}
                   <textarea id="{{ field.name }}" name="{{ field.name }}" rows="3" {{ 'readonly' if field.readonly else '' }}>{{ data.get(field.name, '') }}</textarea>
                 {% elif field.type == 'checkbox' %}

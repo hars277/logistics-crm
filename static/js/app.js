@@ -376,10 +376,10 @@
     } catch (_) {}
   }
 
-  // Put a small "+ Add" button beside a select (wraps select + button in a flex row).
+  // Put a small "+ Add" button beside a select (wraps select + button in a flex row). Returns the button.
   function injectAddButton(selectName, label, handler) {
     const sel = $(`[name="${selectName}"]`);
-    if (!sel || sel.dataset.addWired) return;
+    if (!sel || sel.dataset.addWired) return null;
     sel.dataset.addWired = '1';
     const row = document.createElement('div');
     row.className = 'inline-add-row';
@@ -389,11 +389,11 @@
     btn.type = 'button';
     btn.className = 'btn mini secondary';
     btn.textContent = label;
-    btn.addEventListener('click', handler);
+    if (handler) btn.addEventListener('click', handler);
     row.appendChild(btn);
+    return btn;
   }
 
-  // CASH -> no account fields at all. BANK/FUEL -> show the matching account picker + blanks.
   function showWrap(name, show, required) {
     const wrap = $(`[data-field-wrap="${name}"]`);
     if (!wrap) return;
@@ -404,36 +404,64 @@
       if (!show) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }
     }
   }
+
+  // Fill the voucher's payment-account dropdown with petrol pumps (FUEL mode).
+  async function populatePumpsIntoAccount(preserve) {
+    const sel = $('[name="payment_account"]');
+    if (!sel) return;
+    try {
+      const data = await api('/api/pumps');
+      const cur = preserve != null ? preserve : sel.value;
+      sel.innerHTML = '<option value="">--Select Petrol Pump--</option>' + data.results.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+      if (cur && Array.from(sel.options).some(o => o.value === cur)) sel.value = cur;
+    } catch (_) {}
+  }
+
+  let payAddBtn = null;
+  function setPayAddButton(label, handler) {
+    if (!payAddBtn) return;
+    payAddBtn.textContent = label;
+    payAddBtn.onclick = handler;
+  }
+
+  // CASH -> nothing account-related. ACCOUNT(BANK) -> bank account + Add Account.
+  // FUEL -> petrol pump + Add Petrol Pump.
   function applyPaymentMode() {
     const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
-    // Account dropdown is always visible but strictly filtered to the selected type.
-    showWrap('payment_account', true, true);
-    // "Paid To A/C No." is a bank-only blank.
-    showWrap('paid_to_account', mode === 'BANK', true);
     const accWrap = $('[data-field-wrap="payment_account"]');
-    if (accWrap) {
-      const lab = $('label', accWrap);
-      const txt = mode === 'CASH' ? 'Cash Account ' : (mode === 'BANK' ? 'Bank Account ' : 'Fuel Provider ');
-      if (lab && lab.childNodes[0]) lab.childNodes[0].nodeValue = txt;
-    }
+    const lab = accWrap ? $('label', accWrap) : null;
+    const setLabel = (t) => { if (lab && lab.childNodes[0]) lab.childNodes[0].nodeValue = t; };
     const hint = $('#paymentHint');
-    if (hint) hint.textContent = mode === 'CASH'
-      ? 'Cash account chuniye.'
-      : (mode === 'BANK' ? 'Bank account chuniye aur Paid To A/C No. bharein.' : 'Fuel provider / pump account chuniye.');
+
+    if (mode === 'CASH') {
+      showWrap('payment_account', false, false);
+      showWrap('paid_to_account', false, false);
+      if (hint) hint.textContent = 'Cash payment — koi account / pump detail zaroori nahi.';
+    } else if (mode === 'BANK') {
+      showWrap('payment_account', true, true);
+      showWrap('paid_to_account', true, true);
+      setLabel('Bank Account ');
+      populateAccounts('');
+      setPayAddButton('+ Add Account', () => {
+        const t = $('#accountForm [name="acc_type"]');
+        if (t) { t.value = 'BANK'; t.dispatchEvent(new Event('change')); }
+        $('#accountModal')?.classList.remove('hidden');
+      });
+      if (hint) hint.textContent = 'Account chuniye aur Paid To A/C No. bharein.';
+    } else { // FUEL
+      showWrap('payment_account', true, true);
+      showWrap('paid_to_account', false, false);
+      setLabel('Petrol Pump ');
+      populatePumpsIntoAccount('');
+      setPayAddButton('+ Add Petrol Pump', () => $('#pumpModal')?.classList.remove('hidden'));
+      if (hint) hint.textContent = 'Petrol pump chuniye.';
+    }
   }
 
   if (window.CRM_STEP === 'advance-voucher') {
-    injectAddButton('payment_account', '+ Account', () => {
-      const modal = $('#accountModal');
-      const mode = ($('[name="amount_paid_by"]:checked')?.value) || 'CASH';
-      const t = $('#accountForm [name="acc_type"]');
-      if (t) { t.value = mode; t.dispatchEvent(new Event('change')); }
-      modal?.classList.remove('hidden');
-    });
-    populateAccounts($('[name="payment_account"]')?.value);
+    payAddBtn = injectAddButton('payment_account', '+ Add Account');
     applyPaymentMode();
-    $$('[name="amount_paid_by"]').forEach(r => r.addEventListener('change', () => { populateAccounts(''); applyPaymentMode(); }));
-
+    $$('[name="amount_paid_by"]').forEach(r => r.addEventListener('change', applyPaymentMode));
   }
 
   // "Add Driver" button (next to the driver field, like Add Vehicle) opens the driver modal.
@@ -529,7 +557,8 @@
       const data = await api('/api/pumps', { method: 'POST', body: JSON.stringify(serializeForm(pumpForm)) });
       $('#pumpModal').classList.add('hidden');
       pumpForm.reset();
-      await populatePumps(data.name);
+      await populatePumps(data.name);          // advance-fuel pump field
+      await populatePumpsIntoAccount(data.name); // advance-voucher FUEL payment field
       toast(data.message, 'success');
     } catch (err) { toast(err.message, 'error'); }
   });
@@ -543,7 +572,7 @@
       $('#accountModal').classList.add('hidden');
       // Switch the payment mode to match the new account's type, then select it.
       const radio = $(`[name="amount_paid_by"][value="${payload.acc_type}"]`);
-      if (radio) { radio.checked = true; }
+      if (radio) { radio.checked = true; if (typeof applyPaymentMode === 'function') applyPaymentMode(); }
       accountForm.reset();
       await populateAccounts(data.name);
       recalc();
@@ -699,7 +728,11 @@
   }
   function missingRequired(form) {
     const d = serializeForm(form);
-    return (REQUIRED[window.CRM_STEP] || []).filter(k => !String(d[k] ?? '').trim());
+    return (REQUIRED[window.CRM_STEP] || []).filter(k => {
+      const el = $(`[name="${CSS.escape(k)}"]`, form);
+      if (el && el.offsetParent === null) return false; // hidden (e.g. account field in CASH mode) -> not required
+      return !String(d[k] ?? '').trim();
+    });
   }
   function handleSaveError(err) {
     const d = err.data || {};
