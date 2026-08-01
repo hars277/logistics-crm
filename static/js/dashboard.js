@@ -123,8 +123,23 @@
     });
   }
 
-  // Bulk trips upload (from the sample sheet).
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // One-click fleet import (Ajay Transport vehicles + drivers).
+  const seedBtn = document.getElementById('seedFleetBtn');
+  if (seedBtn) seedBtn.addEventListener('click', async () => {
+    const out = document.getElementById('seedFleetResult');
+    seedBtn.disabled = true; out.textContent = 'Importing…';
+    try {
+      const res = await fetch('/api/seed/fleet', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf } });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.message || 'Failed');
+      out.textContent = `✅ ${data.message} Ab dropdown me sab aa jayenge.`;
+    } catch (err) { out.textContent = '❌ ' + err.message; }
+    finally { seedBtn.disabled = false; }
+  });
+
+  // Bulk trips upload (from the sample sheet).
   const tripsForm = document.getElementById('tripsImportForm');
   if (tripsForm) tripsForm.addEventListener('submit', async (e) => {
     e.preventDefault();

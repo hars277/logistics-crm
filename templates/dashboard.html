@@ -14,6 +14,10 @@
 
   <div style="margin:0 24px 4px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2)">
     <div class="hint" style="margin-bottom:8px"><b>Trips data (Excel)</b> — saare trips download karo, ya sample sheet bhar ke bulk trips upload karo. (Sheet me <span style="color:var(--danger);font-weight:800">*</span> wale columns mandatory hain.)</div>
+    <div style="margin-bottom:10px">
+      <button class="btn primary" type="button" id="seedFleetBtn">⚡ Import Ajay Transport Fleet (88 vehicles + 81 drivers)</button>
+      <span class="hint" id="seedFleetResult" style="margin-left:8px"></span>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <a class="btn secondary" href="{{ url_for('export_trips') }}" download>⬇ Download All Trips</a>
       <a class="btn secondary" href="{{ url_for('sample_trips') }}" download>⬇ Sample Sheet</a>

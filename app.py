@@ -161,6 +161,23 @@ TRIP_SHEET_COLS = [
     ("remarks", False, "voucher_json"),
 ]
 
+# Vehicle numbers transcribed from the existing Ajay Transport Google Form (bulk-import helper).
+AJAY_VEHICLE_NOS = [
+    "HR47C1606", "HR47C2000", "HR47C6186", "HR47C6346", "HR47C6473", "HR47C7538", "HR47C7967",
+    "HR47C8303", "HR47C9264", "HR47C9432", "HR47D0188", "HR47D0240", "HR47D0344", "HR47D0640",
+    "HR47D0851", "HR47D1612", "HR47D2312", "HR47D2434", "HR47D2678", "HR47D2686", "HR47D2809",
+    "HR47D2942", "HR47D2984", "HR47D3088", "HR47D4451", "HR47D4641", "HR47D4808", "HR47D4983",
+    "HR47D5684", "HR47D5958", "HR47D6300", "HR47D6845", "HR47D7634", "HR47D7794", "HR47D8861",
+    "HR47D8891", "HR47D9725", "HR47D9891", "HR47D9902", "HR47E0389", "HR47E1466", "HR47E2048",
+    "HR47E2446", "HR47E3468", "HR47E4396", "HR47E4625", "HR47E6185", "HR47E6943", "HR47E7566",
+    "HR47E8352", "HR47E8638", "HR47E8919", "HR47E9935", "HR47F0538", "HR47F0802", "HR47F0838",
+    "HR47F3446", "HR47F4084", "HR47F4685", "HR47F5186", "HR47F8206", "HR47F8822", "HR47F9152",
+    "HR47F9781", "HR47G3796", "HR47G3972", "HR47G8362", "HR47G9589", "HR47G9682", "HR47H0045",
+    "HR47H2086", "HR47H9738", "RJ32GC1623", "RJ32GC1624", "RJ32GC1625", "RJ32GC1626", "RJ32GC1627",
+    "RJ32GC1702", "RJ32GC1704", "RJ32GC1705", "RJ32GC5988", "RJ32GC5989", "RJ32GC5990", "RJ32GC5991",
+    "RJ32GC5992", "RJ40G8215", "RJ40G8216", "RJ52G2453",
+]
+
 # Driver names transcribed from the existing Ajay Transport Google Form (bulk-import helper).
 AJAY_DRIVER_NAMES = [
     "AMIR KHAN", "ANIL", "ASHOK RAJPUT", "ASRUDDIN", "AVDHESH KUMAR", "AVNISH KUMAR", "AZAJ ANSARI",
@@ -756,6 +773,33 @@ def create_app() -> Flask:
                 errors.append(f"Row {i}: {exc}")
         record_audit("TRIPS_IMPORT", "trip_processes", None, {"created": created, "errors": errors[:20]})
         return jsonify({"ok": True, "created": created, "errors": errors[:20]})
+
+    @app.route("/api/seed/fleet", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_seed_fleet():
+        """One-click import of the Ajay Transport fleet (vehicles + drivers) into the DB."""
+        now = datetime.utcnow().isoformat()
+        div_id = session["current_division_id"]
+        v_added = 0
+        for vno in AJAY_VEHICLE_NOS:
+            vno = normalize_vehicle_no(vno)
+            if not vno:
+                continue
+            cur = execute(
+                """INSERT INTO vehicles(vehicle_no, current_division_id, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, vehicle_type, created_at, updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT (vehicle_no) DO NOTHING""",
+                (vno, div_id, "", "", "", 0, 0, "SELF", now, now),
+            )
+            v_added += 1
+        d_added = 0
+        for name in AJAY_DRIVER_NAMES:
+            execute("INSERT INTO drivers(name, mobile, active, created_at) VALUES(?,?,1,?) ON CONFLICT (name, mobile) DO NOTHING", (name, "", now))
+            d_added += 1
+        vcount = query_one("SELECT COUNT(*) AS c FROM vehicles")["c"]
+        dcount = query_one("SELECT COUNT(*) AS c FROM drivers")["c"]
+        record_audit("SEED_FLEET", "vehicles", None, {"vehicles": len(AJAY_VEHICLE_NOS), "drivers": len(AJAY_DRIVER_NAMES)})
+        return jsonify({"ok": True, "message": f"Fleet imported. Vehicles total: {vcount}, Drivers total: {dcount}.", "vehicles": vcount, "drivers": dcount})
 
     @app.route("/api/dashboard/stats")
     @login_required
