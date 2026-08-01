@@ -227,40 +227,60 @@
   // Digits-only, max 10 for mobile.
   F.driverMobile.addEventListener('input', () => { F.driverMobile.value = F.driverMobile.value.replace(/\D/g, '').slice(0, 10); });
 
-  // Auto-fill driver/fuel from the vehicle master when a known vehicle is entered.
-  // Dropdown of ALL vehicles from the database (select or type). Works on public + login form.
-  (async function loadVehicleOptions() {
-    const url = form.dataset.vehicles || '/api/vehicle-options';
+  // A real click-to-open dropdown (Google-Form style): shows all options on focus,
+  // filters as you type, lets you pick or type a new value.
+  function attachCombo(input, getOptions, onSelect) {
+    const wrap = input.closest('.field') || input.parentElement;
+    wrap.classList.add('ac-wrap');
+    const dd = document.createElement('div');
+    dd.className = 'autocomplete-list hidden';
+    wrap.appendChild(dd);
+    function render(filter) {
+      const opts = getOptions() || [];
+      const f = String(filter || '').toUpperCase();
+      const matched = (f ? opts.filter(o => o.toUpperCase().includes(f)) : opts).slice(0, 500);
+      if (!matched.length) { dd.classList.add('hidden'); return; }
+      dd.innerHTML = matched.map(o => `<button type="button" data-v="${o.replace(/"/g, '&quot;')}"><strong>${o}</strong></button>`).join('');
+      dd.classList.remove('hidden');
+      dd.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = b.dataset.v;
+        dd.classList.add('hidden');
+        if (onSelect) onSelect(b.dataset.v);
+        updatePreview();
+      }));
+    }
+    input.addEventListener('focus', () => render(''));
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('blur', () => setTimeout(() => dd.classList.add('hidden'), 160));
+    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) dd.classList.add('hidden'); });
+  }
+
+  // Load vehicle + driver lists, then wire the dropdowns.
+  let vehicleList = [];
+  let driverList = [];
+  let driverMap = {};
+  (async function loadOptions() {
     try {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      const data = await res.json();
-      if (!data.vehicles || !data.vehicles.length) return;
-      let dl = document.getElementById('vehOptions');
-      if (!dl) { dl = document.createElement('datalist'); dl.id = 'vehOptions'; document.body.appendChild(dl); }
-      dl.innerHTML = data.vehicles.map(v => `<option value="${v}"></option>`).join('');
-      F.vehicleNo.setAttribute('list', 'vehOptions');
+      const vr = await fetch(form.dataset.vehicles || '/api/vehicle-options', { credentials: 'same-origin' });
+      const vd = await vr.json();
+      vehicleList = vd.vehicles || [];
+    } catch (_) {}
+    try {
+      const dr = await fetch(form.dataset.drivers || '/api/driver-options', { credentials: 'same-origin' });
+      const dd = await dr.json();
+      driverList = (dd.drivers || []).map(d => d.name);
+      (dd.drivers || []).forEach(d => { driverMap[d.name] = d.mobile || ''; });
     } catch (_) {}
   })();
 
-  // Dropdown of ALL drivers (select or type). Auto-fills mobile when a known driver is chosen.
-  let driverMap = {};
-  (async function loadDriverOptions() {
-    const url = form.dataset.drivers || '/api/driver-options';
-    try {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      const data = await res.json();
-      if (!data.drivers || !data.drivers.length) return;
-      driverMap = {};
-      data.drivers.forEach(d => { driverMap[d.name] = d.mobile || ''; });
-      let dl = document.getElementById('driverOptions');
-      if (!dl) { dl = document.createElement('datalist'); dl.id = 'driverOptions'; document.body.appendChild(dl); }
-      dl.innerHTML = data.drivers.map(d => `<option value="${d.name}"></option>`).join('');
-      F.driverName.setAttribute('list', 'driverOptions');
-    } catch (_) {}
-  })();
-  F.driverName.addEventListener('input', () => {
-    const mob = driverMap[F.driverName.value.trim().toUpperCase()] || driverMap[F.driverName.value.trim()];
-    if (mob && !F.driverMobile.value) F.driverMobile.value = mob;
+  attachCombo(F.vehicleNo, () => vehicleList, (v) => {
+    F.vehicleNo.value = v.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    F.vehicleNo.dispatchEvent(new Event('blur'));
+  });
+  attachCombo(F.driverName, () => driverList, (name) => {
+    const mob = driverMap[name] || '';
+    if (mob) F.driverMobile.value = mob;
   });
 
   F.vehicleNo.addEventListener('blur', async () => {
