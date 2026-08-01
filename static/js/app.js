@@ -434,10 +434,12 @@
     applyPaymentMode();
     $$('[name="amount_paid_by"]').forEach(r => r.addEventListener('change', () => { populateAccounts(''); applyPaymentMode(); }));
 
-    // Driver master: turn the driver field into a picker with an "+ Driver" button.
-    injectAddButton('driver_name', '+ Driver', () => $('#driverModal')?.classList.remove('hidden'));
-    populateDrivers($('[name="driver_name"]')?.value);
   }
+
+  // "Add Driver" button (next to the driver field, like Add Vehicle) opens the driver modal.
+  $$('[data-open-driver-modal]').forEach(btn => btn.addEventListener('click', () => $('#driverModal')?.classList.remove('hidden')));
+  // Driver dropdown (datalist) of all drivers + auto-fill mobile when one is picked.
+  populateDrivers();
 
   // ---- Driver master ----
   async function populateDrivers(preserve) {

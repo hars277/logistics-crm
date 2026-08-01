@@ -193,7 +193,7 @@ FIELD_CONFIG: Dict[str, List[Dict[str, Any]]] = {
             {"name": "opening_km", "label": "Opening KM", "type": "number"},
         ]},
         {"title": "Driver Details", "fields": [
-            {"name": "driver_name", "label": "First Driver Code/Name", "type": "text"},
+            {"name": "driver_name", "label": "First Driver Code/Name", "type": "driver"},
             {"name": "driver_mobile", "label": "First Driver Mobile No", "type": "tel"},
         ]},
         {"title": "Route - Fuel Details", "fields": [

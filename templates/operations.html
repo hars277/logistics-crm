@@ -66,6 +66,11 @@
                     <button class="btn mini secondary" type="button" data-open-vehicle-modal>Add Vehicle</button>
                   </div>
                   <small class="hint vehicle-hint" id="vehicleHint"></small>
+                {% elif field.type == 'driver' %}
+                  <div class="vehicle-field">
+                    <input id="{{ field.name }}" name="{{ field.name }}" value="{{ data.get(field.name, '') }}" placeholder="Driver name" list="driverOptionsOp" data-driver-input>
+                    <button class="btn mini secondary" type="button" data-open-driver-modal>Add Driver</button>
+                  </div>
                 {% else %}
                   <input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.type }}" value="{{ data.get(field.name, '') }}" {{ 'step=any' if field.type=='number' else '' }} {{ 'readonly' if field.readonly else '' }}>
                 {% endif %}
