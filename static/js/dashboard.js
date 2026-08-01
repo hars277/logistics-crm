@@ -123,6 +123,25 @@
     });
   }
 
+  // Bulk trips upload (from the sample sheet).
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const tripsForm = document.getElementById('tripsImportForm');
+  if (tripsForm) tripsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = document.getElementById('tripsImportResult');
+    out.textContent = 'Uploading…';
+    try {
+      const res = await fetch('/api/trips/import', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrf }, body: new FormData(tripsForm),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.message || 'Import failed');
+      out.textContent = `✅ ${data.created} trips created` + (data.errors && data.errors.length ? ` · Errors: ${data.errors.join(' | ')}` : '');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) { out.textContent = '❌ ' + err.message; }
+  });
+
   // Copy the no-login Peshgi link.
   const copyBtn = document.getElementById('copyPeshgiLink');
   if (copyBtn) copyBtn.addEventListener('click', async () => {

@@ -13,6 +13,19 @@
   </div>
 
   <div style="margin:0 24px 4px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2)">
+    <div class="hint" style="margin-bottom:8px"><b>Trips data (Excel)</b> — saare trips download karo, ya sample sheet bhar ke bulk trips upload karo. (Sheet me <span style="color:var(--danger);font-weight:800">*</span> wale columns mandatory hain.)</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <a class="btn secondary" href="{{ url_for('export_trips') }}" download>⬇ Download All Trips</a>
+      <a class="btn secondary" href="{{ url_for('sample_trips') }}" download>⬇ Sample Sheet</a>
+      <form id="tripsImportForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+        <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
+        <button class="btn primary" type="submit">⬆ Upload &amp; Create Trips</button>
+      </form>
+      <span class="hint" id="tripsImportResult"></span>
+    </div>
+  </div>
+
+  <div style="margin:0 24px 4px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2)">
     <div class="hint" style="margin-bottom:8px"><b>No-login Peshgi link</b> — ye link drivers/staff ko bhejo, wo bina login ke sirf Peshgi form bhar payenge (baaki CRM locked rahega).</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="publicPeshgiLink" readonly value="{{ public_peshgi_url }}" style="flex:1;min-width:240px;border:1px solid var(--field-line);border-radius:10px;padding:9px 12px;background:var(--field-bg);color:var(--ink)">

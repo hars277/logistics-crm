@@ -119,6 +119,48 @@ PUMP_SEED = [
 # FTL options shared by the voucher form and the Add Vehicle popup.
 FTL_TYPES = ["32 FEET SXL", "32 FEET MXL", "20 FEET", "22 FEET", "24 FEET", "40 FEET", "CONTAINER", "OPEN BODY"]
 
+# Flat spreadsheet schema for trip export / sample / import. (name, mandatory, step-column)
+TRIP_SHEET_COLS = [
+    ("vehicle_no", True, "voucher_json"),
+    ("tp_no", False, None),
+    ("status", False, None),
+    ("voucher_date", False, "voucher_json"),
+    ("voucher_time", False, "voucher_json"),
+    ("vendor_name", False, "voucher_json"),
+    ("ftl_type", False, "voucher_json"),
+    ("fuel_type", False, "voucher_json"),
+    ("driver_name", False, "voucher_json"),
+    ("driver_mobile", False, "voucher_json"),
+    ("assoc_company", False, "voucher_json"),
+    ("route", False, "voucher_json"),
+    ("route_distance", False, "voucher_json"),
+    ("payable_advance", False, "voucher_json"),
+    ("paid_advance", False, "voucher_json"),
+    ("total_advance", False, "voucher_json"),
+    ("amount_paid_by", False, "voucher_json"),
+    ("payment_account", False, "voucher_json"),
+    ("loading_date", False, "trip_creation_json"),
+    ("reporting_date", False, "trip_creation_json"),
+    ("consignor", False, "trip_creation_json"),
+    ("consignee", False, "trip_creation_json"),
+    ("rate", False, "trip_creation_json"),
+    ("weight", False, "trip_creation_json"),
+    ("packet", False, "trip_creation_json"),
+    ("basic_freight", False, "trip_creation_json"),
+    ("total_freight", False, "trip_creation_json"),
+    ("unloading_date", False, "unloading_json"),
+    ("driver_expense", False, "expense_json"),
+    ("total_tp_expense", False, "expense_json"),
+    ("from_place", False, "peshgi_json"),
+    ("to_place", False, "peshgi_json"),
+    ("labour", False, "peshgi_json"),
+    ("roti", False, "peshgi_json"),
+    ("babu", False, "peshgi_json"),
+    ("hold", False, "peshgi_json"),
+    ("total_peshgi", False, "peshgi_json"),
+    ("remarks", False, "voucher_json"),
+]
+
 # Driver names transcribed from the existing Ajay Transport Google Form (bulk-import helper).
 AJAY_DRIVER_NAMES = [
     "AMIR KHAN", "ANIL", "ASHOK RAJPUT", "ASRUDDIN", "AVDHESH KUMAR", "AVNISH KUMAR", "AZAJ ANSARI",
@@ -612,6 +654,108 @@ def create_app() -> Flask:
         token = public_peshgi_token()
         public_url = url_for("peshgi_public", token=token, _external=True) if token else ""
         return render_template("dashboard.html", counts=counts, recent=recent, public_peshgi_url=public_url)
+
+    @app.route("/export/trips.xlsx")
+    @login_required
+    def export_trips():
+        """Every trip, one row each, all key fields flattened into an Excel sheet."""
+        trips = query_all(
+            """
+            SELECT tp.*, v.vehicle_no AS v_no, d.name AS d_name
+            FROM trip_processes tp
+            LEFT JOIN vehicles v ON v.id = tp.vehicle_id
+            LEFT JOIN divisions d ON d.id = tp.division_id
+            ORDER BY tp.created_at DESC
+            """
+        )
+        headers = [f"{name} *" if mand else name for name, mand, _ in TRIP_SHEET_COLS] + ["division", "created_at"]
+        rows = []
+        for t in trips:
+            merged = merged_trip_data(t)
+            row = []
+            for name, _, _ in TRIP_SHEET_COLS:
+                if name == "tp_no":
+                    row.append(t.get("tp_no", ""))
+                elif name == "status":
+                    row.append(t.get("status", ""))
+                elif name == "vehicle_no":
+                    row.append(t.get("v_no") or merged.get("vehicle_no", ""))
+                else:
+                    row.append(merged.get(name, ""))
+            row += [t.get("d_name", ""), (t.get("created_at") or "")[:19].replace("T", " ")]
+            rows.append(row)
+        return _xlsx_response("all_trips", headers, rows, mandatory_count=sum(1 for _, m, _ in TRIP_SHEET_COLS if m))
+
+    @app.route("/sample/trips.xlsx")
+    @login_required
+    def sample_trips():
+        """Blank template to fill in and re-upload. Mandatory columns are marked with *."""
+        headers = [f"{name} *" if mand else name for name, mand, _ in TRIP_SHEET_COLS]
+        example = []
+        for name, _, _ in TRIP_SHEET_COLS:
+            example.append({
+                "vehicle_no": "HR55AB1234", "voucher_date": "2026-07-01", "vendor_name": "AJAY TRANSPORT",
+                "ftl_type": "32 FEET MXL", "fuel_type": "DIESEL", "driver_name": "RAMESH KUMAR",
+                "driver_mobile": "9876543210", "route": "DELHI-JAIPUR", "route_distance": "280",
+                "payable_advance": "5000", "paid_advance": "5000", "amount_paid_by": "CASH",
+                "rate": "9000", "weight": "7000", "total_freight": "9000", "total_tp_expense": "6000",
+            }.get(name, ""))
+        return _xlsx_response("sample_trips", headers, [example], mandatory_count=sum(1 for _, m, _ in TRIP_SHEET_COLS if m))
+
+    @app.route("/api/trips/import", methods=["POST"])
+    @login_required
+    @csrf_required
+    def api_trips_import():
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"ok": False, "message": "Upload the filled sheet (CSV/XLSX)."}), 400
+        ext = Path(secure_filename(f.filename or "trips")).suffix.lower()
+        if ext not in [".csv", ".xlsx", ".xlsm"]:
+            return jsonify({"ok": False, "message": "Only CSV or XLSX files are allowed."}), 400
+        raw_rows = parse_vehicle_upload(f, ext)
+        created, errors = 0, []
+        now = datetime.utcnow().isoformat()
+        div_id = session["current_division_id"]
+        for i, raw in enumerate(raw_rows, start=2):
+            try:
+                row = {re.sub(r"[^a-z0-9]+", "_", str(k).strip().lower()).strip("_"): v for k, v in raw.items()}
+                vehicle_no = normalize_vehicle_no(row.get("vehicle_no"))
+                if not vehicle_no:
+                    raise ValueError("vehicle_no missing")
+                vehicle = find_vehicle(vehicle_no)
+                if not vehicle:
+                    vid = execute_returning_id(
+                        """INSERT INTO vehicles(vehicle_no, current_division_id, ftl_type, driver_name, driver_mobile, last_closing_km, opening_km, vehicle_type, created_at, updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                        (vehicle_no, div_id, normalize_text(row.get("ftl_type")), normalize_text(row.get("driver_name")), re.sub(r"[^0-9]", "", normalize_text(row.get("driver_mobile")))[:10], 0, 0, "SELF", now, now),
+                    )
+                    vehicle = query_one("SELECT * FROM vehicles WHERE id=?", (vid,))
+                # Spread the row's values into the matching step JSONs.
+                step_data: Dict[str, Dict[str, Any]] = {}
+                for name, _, col in TRIP_SHEET_COLS:
+                    if not col:
+                        continue
+                    val = normalize_text(row.get(name))
+                    if val != "":
+                        step_data.setdefault(col, {})[name] = val
+                for col in step_data:
+                    step_data[col]["vehicle_no"] = vehicle_no
+                tp_no = normalize_text(row.get("tp_no")) or next_tp_no(row.get("assoc_company"), query_one("SELECT * FROM divisions WHERE id=?", (vehicle["current_division_id"],)))
+                status = normalize_text(row.get("status")) or ("Closed" if step_data.get("expense_json") else "In Progress")
+                current_step = "trip-expense" if step_data.get("expense_json") else "advance-voucher"
+                cols = ["tp_no", "vehicle_id", "division_id", "status", "current_step", "created_by", "created_at", "updated_at"]
+                vals = [tp_no, vehicle["id"], vehicle["current_division_id"], status, current_step, session["user_id"], now, now]
+                for col in ["voucher_json", "trip_creation_json", "unloading_json", "expense_json", "peshgi_json"]:
+                    if step_data.get(col):
+                        cols.append(col)
+                        vals.append(json.dumps(step_data[col]))
+                placeholders = ",".join(["?"] * len(vals))
+                execute(f"INSERT INTO trip_processes({','.join(cols)}) VALUES({placeholders}) ON CONFLICT (tp_no) DO NOTHING", vals)
+                created += 1
+            except Exception as exc:
+                errors.append(f"Row {i}: {exc}")
+        record_audit("TRIPS_IMPORT", "trip_processes", None, {"created": created, "errors": errors[:20]})
+        return jsonify({"ok": True, "created": created, "errors": errors[:20]})
 
     @app.route("/api/dashboard/stats")
     @login_required
@@ -1554,6 +1698,42 @@ def sanitize_vehicle_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "current_division_id": int(payload.get("current_division_id") or session.get("current_division_id") or 1),
         "vehicle_type": normalize_text(payload.get("vehicle_type") or "SELF")[:50],
     }
+
+
+def _xlsx_response(basename: str, headers: List[str], rows: List[List[Any]], mandatory_count: int = 0) -> Response:
+    """Build an .xlsx (openpyxl) with mandatory (*) headers highlighted; CSV fallback."""
+    if openpyxl is not None:
+        from openpyxl.styles import Font, PatternFill, Alignment
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Trips"
+        ws.append(headers)
+        for idx, h in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=idx)
+            is_mand = h.rstrip().endswith("*")
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="C0392B" if is_mand else "34495E")
+            cell.alignment = Alignment(horizontal="center")
+        for r in rows:
+            ws.append(["" if v is None else v for v in r])
+        ws.freeze_panes = "A2"
+        for col_cells in ws.columns:
+            width = min(max((len(str(c.value or "")) for c in col_cells), default=10) + 2, 30)
+            ws.column_dimensions[col_cells[0].column_letter].width = width
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True, download_name=f"{basename}.xlsx",
+        )
+    # Fallback: CSV
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(headers)
+    for r in rows:
+        w.writerow(["" if v is None else v for v in r])
+    return Response(out.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={basename}.csv"})
 
 
 def sanitize_driver_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
