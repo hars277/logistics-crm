@@ -929,6 +929,19 @@ def create_app() -> Flask:
             "open_trip_step": open_trip["current_step"] if open_trip else None,
         })
 
+    @app.route("/api/vehicle-options")
+    @login_required
+    def api_vehicle_options():
+        rows = query_all("SELECT vehicle_no FROM vehicles ORDER BY vehicle_no")
+        return jsonify({"ok": True, "vehicles": [r["vehicle_no"] for r in rows]})
+
+    @app.route("/api/peshgi/public-vehicles")
+    def api_peshgi_public_vehicles():
+        if not check_public_token(request.args.get("token", "")):
+            return jsonify({"ok": False, "vehicles": []}), 403
+        rows = query_all("SELECT vehicle_no FROM vehicles ORDER BY vehicle_no")
+        return jsonify({"ok": True, "vehicles": [r["vehicle_no"] for r in rows]})
+
     @app.route("/api/vehicle/suggest")
     @login_required
     def api_vehicle_suggest():

@@ -228,35 +228,19 @@
   F.driverMobile.addEventListener('input', () => { F.driverMobile.value = F.driverMobile.value.replace(/\D/g, '').slice(0, 10); });
 
   // Auto-fill driver/fuel from the vehicle master when a known vehicle is entered.
-  // Type-ahead dropdown of vehicles from the database (logged-in page only).
-  if (!form.dataset.endpoint) {
-    const wrap = F.vehicleNo.closest('.field') || F.vehicleNo.parentElement;
-    wrap.classList.add('ac-wrap');
-    const dd = document.createElement('div');
-    dd.className = 'autocomplete-list hidden';
-    wrap.appendChild(dd);
-    const close = () => dd.classList.add('hidden');
-    let t = null;
-    F.vehicleNo.addEventListener('input', () => {
-      const q = F.vehicleNo.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      F.vehicleNo.value = q;
-      clearTimeout(t);
-      if (q.length < 1) { close(); return; }
-      t = setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/vehicle/suggest?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
-          const data = await res.json();
-          if (!data.results || !data.results.length) { close(); return; }
-          dd.innerHTML = data.results.map(r => `<button type="button" data-vno="${r.vehicle_no}"><strong>${r.vehicle_no}</strong><span>${[r.division_name, r.driver_name].filter(Boolean).join(' · ')}</span></button>`).join('');
-          dd.classList.remove('hidden');
-          dd.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', (e) => {
-            e.preventDefault(); F.vehicleNo.value = b.dataset.vno; close(); F.vehicleNo.dispatchEvent(new Event('blur'));
-          }));
-        } catch (_) { close(); }
-      }, 200);
-    });
-    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
-  }
+  // Dropdown of ALL vehicles from the database (select or type). Works on public + login form.
+  (async function loadVehicleOptions() {
+    const url = form.dataset.vehicles || '/api/vehicle-options';
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.vehicles || !data.vehicles.length) return;
+      let dl = document.getElementById('vehOptions');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'vehOptions'; document.body.appendChild(dl); }
+      dl.innerHTML = data.vehicles.map(v => `<option value="${v}"></option>`).join('');
+      F.vehicleNo.setAttribute('list', 'vehOptions');
+    } catch (_) {}
+  })();
 
   F.vehicleNo.addEventListener('blur', async () => {
     const v = F.vehicleNo.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
