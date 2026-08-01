@@ -119,6 +119,23 @@ PUMP_SEED = [
 # FTL options shared by the voucher form and the Add Vehicle popup.
 FTL_TYPES = ["32 FEET SXL", "32 FEET MXL", "20 FEET", "22 FEET", "24 FEET", "40 FEET", "CONTAINER", "OPEN BODY"]
 
+# Driver names transcribed from the existing Ajay Transport Google Form (bulk-import helper).
+AJAY_DRIVER_NAMES = [
+    "AMIR KHAN", "ANIL", "ASHOK RAJPUT", "ASRUDDIN", "AVDHESH KUMAR", "AVNISH KUMAR", "AZAJ ANSARI",
+    "BABLU", "BADRE ALAM", "BALVEER SINGH", "BASRUDIIN ANSARI", "DHARMENDRA", "DILIP", "EKBAL ANSARI",
+    "GANESH", "GOPI CHAND", "GULFARAJ ANSARI", "HANSRAJ SONI", "HARISH CHANDRA", "IKBAL ANSARI",
+    "INTAJ MIYA", "JABIR ANSARI", "JAG JEEVAN", "JAIVEER SINGH", "JAKIR", "JAMALUDDIN",
+    "JITENDRA SINGH CHAUHAN", "KRISHAN SINGH (KALIYA)", "KRISHNA KUMAR", "LAVKESH", "MAHAVEER PRASAD",
+    "MAHESH", "MANAN ANSARI", "MANRUDDIN", "MD JAMSED ANSARI", "MD NAIM ANSARI", "MD SAJID", "MO KALIM",
+    "MO SAHAWAJ", "MUKESH KUMAR", "MUKESH KUMAR GURJAR", "MUNNA LAL", "NANLE LAL", "PINTU GAUTAM",
+    "PIYARUDDIN", "PRAWAL PRATAP", "RADHE SHYAM", "RAJ", "RAJA", "RAJAN", "RAJESH SINGH", "RAJNEESH",
+    "RAKESH KUMAR", "RAM SAHAY", "RAM SHANKAR", "RAMNEEWAS", "RAVINDRA", "RUP SINGH", "SABIR KHAN",
+    "SAHABAJ ANSARI", "SAJIM ANSARI", "SAMIM ANSARI", "SANTOSH", "SARAD", "SHUBHAM", "SUNIL KUMAR YADAV",
+    "SUSIL PRASAD", "TEJPAL SINGH", "TRIBHAWAN YADAV", "UDAY VEER", "UMESH", "UMESH KUMAR",
+    "VINEY KUMAR JAISWAL", "VINOD KUMAR", "VIRAT PAL", "RAVI / AVNISH", "SURESH", "VIKRAM", "BABAR ALI",
+    "TAJMUL", "JAMSHED",
+]
+
 # Fields that should auto-fill across steps once known for a vehicle's trip.
 # These are merged from earlier saved steps and the vehicle master record.
 CROSS_STEP_AUTOFILL_KEYS = [
@@ -942,6 +959,19 @@ def create_app() -> Flask:
         rows = query_all("SELECT vehicle_no FROM vehicles ORDER BY vehicle_no")
         return jsonify({"ok": True, "vehicles": [r["vehicle_no"] for r in rows]})
 
+    @app.route("/api/driver-options")
+    @login_required
+    def api_driver_options():
+        rows = query_all("SELECT name, mobile FROM drivers WHERE active=1 ORDER BY name")
+        return jsonify({"ok": True, "drivers": [dict(r) for r in rows]})
+
+    @app.route("/api/peshgi/public-drivers")
+    def api_peshgi_public_drivers():
+        if not check_public_token(request.args.get("token", "")):
+            return jsonify({"ok": False, "drivers": []}), 403
+        rows = query_all("SELECT name, mobile FROM drivers WHERE active=1 ORDER BY name")
+        return jsonify({"ok": True, "drivers": [dict(r) for r in rows]})
+
     @app.route("/api/vehicle/suggest")
     @login_required
     def api_vehicle_suggest():
@@ -1108,6 +1138,10 @@ def create_app() -> Flask:
                 "RAMESH KUMAR,9876543210,ATC-D101,HR0120200012345,2030-05-31,123456789012,Village Dharuhera Rewari",
                 "SURESH YADAV,9988776655,ATC-D102,RJ1420190067890,2028-11-15,987654321098,Jaipur Rajasthan",
             ]
+        elif kind == "ajay-drivers":
+            # Ready-to-upload list of the existing Ajay Transport drivers (mobiles blank — fill later).
+            head = "name,mobile,driver_code,licence_no,licence_expiry,aadhaar_no,address"
+            rows = [f"{n},,,,,," for n in AJAY_DRIVER_NAMES]
         else:
             abort(404)
         csv_text = head + "\n" + "\n".join(rows) + "\n"

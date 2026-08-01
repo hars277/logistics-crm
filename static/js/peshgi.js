@@ -242,6 +242,27 @@
     } catch (_) {}
   })();
 
+  // Dropdown of ALL drivers (select or type). Auto-fills mobile when a known driver is chosen.
+  let driverMap = {};
+  (async function loadDriverOptions() {
+    const url = form.dataset.drivers || '/api/driver-options';
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.drivers || !data.drivers.length) return;
+      driverMap = {};
+      data.drivers.forEach(d => { driverMap[d.name] = d.mobile || ''; });
+      let dl = document.getElementById('driverOptions');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'driverOptions'; document.body.appendChild(dl); }
+      dl.innerHTML = data.drivers.map(d => `<option value="${d.name}"></option>`).join('');
+      F.driverName.setAttribute('list', 'driverOptions');
+    } catch (_) {}
+  })();
+  F.driverName.addEventListener('input', () => {
+    const mob = driverMap[F.driverName.value.trim().toUpperCase()] || driverMap[F.driverName.value.trim()];
+    if (mob && !F.driverMobile.value) F.driverMobile.value = mob;
+  });
+
   F.vehicleNo.addEventListener('blur', async () => {
     const v = F.vehicleNo.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     F.vehicleNo.value = v;

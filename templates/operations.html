@@ -196,7 +196,9 @@
         <input type="file" name="file" accept=".csv,.xlsx,.xlsm" required>
         <button class="btn neutral" type="submit">Upload CSV / Excel</button>
         <a class="btn secondary" href="{{ url_for('sample_csv', kind='drivers') }}" download>⬇ Sample CSV</a>
+        <a class="btn secondary" href="{{ url_for('sample_csv', kind='ajay-drivers') }}" download>⬇ Ajay Transport drivers list</a>
       </form>
+      <p class="hint">Tip: "Ajay Transport drivers list" download karke seedha yahan upload kar do — saare drivers ek baar me aa jayenge (mobile baad me bhar sakte ho).</p>
       <div class="bulk-result" id="bulkDriverResult"></div>
     </div>
   </div>

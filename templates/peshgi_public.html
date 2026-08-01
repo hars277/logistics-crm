@@ -28,7 +28,8 @@
 
       <form id="peshgiForm" class="operation-form" autocomplete="off"
             data-endpoint="{{ url_for('api_peshgi_public_save') }}?token={{ token }}"
-            data-vehicles="{{ url_for('api_peshgi_public_vehicles') }}?token={{ token }}">
+            data-vehicles="{{ url_for('api_peshgi_public_vehicles') }}?token={{ token }}"
+            data-drivers="{{ url_for('api_peshgi_public_drivers') }}?token={{ token }}">
         <section class="form-section">
           <div class="section-title"><h3>TCS / THC / LR Photos</h3></div>
           <div class="form-grid">
